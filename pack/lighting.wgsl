@@ -6,7 +6,35 @@ override shadow_softness: u32 = 1u;
 override shadow_strength: f32 = 1.0;
 override moon_shadows: bool = true;
 override moon_shadow_strength: f32 = 0.6;
+override cloud_shadows: f32 = 0.5;
+override cloud_shadow_size: f32 = 1.0;
+override cloud_shadow_cover: f32 = 0.5;
 override colored_light: f32 = 0.0;
+
+// Where the engine's clouds would be over this point, following the light: the shadow of the cloud layer
+// is the cloud pattern sampled where the ray to the light crosses 192 blocks. The pattern is the pack's
+// own, so it does not line up with the clouds you see — it reads as broad patches drifting over the land.
+fn cloud_shade(p: vec3<f32>) -> f32 {
+    let l = frame.light_direction;
+    if l.y <= 0.02 {
+        return 0.0;
+    }
+    let height = 192.33 - p.y;
+    if height <= 0.0 {
+        return 0.0;
+    }
+    let t = height / l.y;
+    if t > 480.0 {
+        return 0.0;
+    }
+    let at = p.xz + l.xz * t + vec2<f32>(frame.time * 0.7, frame.time * 0.2);
+    // `size` stretches the patches, `cover` decides how much of the sky they take: fbm2 averages near
+    // 0.38, so the threshold band is what moves.
+    let scale = 0.010 / max(cloud_shadow_size, 0.05);
+    let n = fbm2(at * scale + vec2<f32>(5.1, 2.7));
+    let low = mix(0.42, 0.10, clamp(cloud_shadow_cover, 0.0, 1.0));
+    return smoothstep(low, low + 0.25, n);
+}
 
 // 1 where the light reaches the point, 0 in shadow. Outside the map's square, and where there is
 // no map, everything is lit, so the pack falls back to vanilla's brightness there.
@@ -94,6 +122,15 @@ fn lit_terrain(input: MaterialInput) -> vec4<f32> {
         nl = 0.4 + 0.5 * abs(facing);
     }
 
+    // Clouds pass over the land and take their share of the light with them. Most of a surface's light is
+    // vanilla's sky term, not our sun add-on, so the shade has to come out of that term as well — at ten
+    // percent of the base it was invisible.
+    var clouds = 0.0;
+    if cloud_shadows > 0.0 && open > 0.001 {
+        clouds = cloud_shade(input.position + frame.camera_position) * clamp(cloud_shadows, 0.0, 1.0);
+        color *= 1.0 - 0.35 * clouds;
+    }
+
     if open > 0.001 && sun_strength > 0.0 {
         let offset_dir = select(n, l, plant);
         let slant = select(facing, 1.0, plant);
@@ -106,7 +143,7 @@ fn lit_terrain(input: MaterialInput) -> vec4<f32> {
             * select(0.0, 1.0, moon_shadows);
         let depth = max(depth_day, depth_night);
         color *= 1.0 - depth * open * (1.0 - shadow);
-        color += albedo * tint * direct_color() * nl * shadow * open;
+        color += albedo * tint * direct_color() * nl * shadow * open * (1.0 - 0.85 * clouds);
         // Leaves and blades glow a little with the sun behind them: the fairy-tale part of daylight.
         if leaf || plant {
             let to_eye = normalize(-input.position);

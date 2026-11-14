@@ -12,7 +12,6 @@ override exposure: f32 = 1.0;
 override contrast: f32 = 1.03;
 override saturation: f32 = 1.06;
 override vignette: f32 = 0.0;
-override dither: bool = true;
 override underwater_murk: f32 = 0.35;
 
 // Vanilla's clouds are geometry the engine draws, at a fixed height, four blocks thick; a pack has
@@ -171,9 +170,7 @@ fn post(input: PostInput) -> vec4<f32> {
     // Proper dither: white noise, a new value every frame, about half a step of 8 bits. IGN was a
     // mistake here — it is a fixed diagonal pattern, and its amplitude is absolute, so in a dark
     // scene (grass at 0.05) the same 0.3 steps read as a 6% screen door over everything.
-    if dither {
-        let n = hash21(input.pixel);
-        c += (n - 0.5) * (0.9 / 255.0);
-    }
+    let n = hash21(input.pixel);
+    c += (n - 0.5) * (0.9 / 255.0);
     return vec4<f32>(clamp(c, vec3<f32>(0.0), vec3<f32>(1.0)), input.color.a);
 }

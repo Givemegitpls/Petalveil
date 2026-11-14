@@ -279,3 +279,48 @@
   `moon_rays` + `moon_rays_strength` (Camera). Shadows take `max(day_weight, night_weight)`; rays take
   `max(sun_rays*day, moon_strength*night)` — that keeps the two from adding up at dusk.
 - `rays.wgsl` projects `frame.light_direction`, not `sun_direction`: that is the moon after sunset.
+- Godrays blinked out with a 5-degree camera turn; the user pointed out the real trigger: **the light going
+  behind the camera**. `sun_screen()` returned zero for `clip.w <= 0`, killing the whole pass. Fixed by placing
+  the source at the screen edge the light is off to (`view.xy`, normalised, mapped to 0.5 ± 0.8), falling back to
+  "no rays" only when the light is exactly behind (`|view.xy| < 0.02`). An earlier attempt that let far geometry
+  pass the sky mask was wrong and has been reverted — do not relax that mask again.
+- Label is "Sun rays" again; the moon has its own strength option, so the shared name "Rays" was confusing.
+- The real cause of the half-degree cut: `clip.xy / clip.w` flips sign when `w` crosses zero, so the ray
+  source jumped to the opposite screen edge exactly as the light passed the shoulder. Dividing by `|w|` keeps
+  the direction on the side the body is leaving by — continuous through the crossing, and identity while the
+  body is in front. Do not reintroduce a signed divide or a separate "behind" branch.
+- Requirement stated plainly by the user: the ray's direction must depend only on the sun/moon position. The
+  faked edge source (1.13-1.14) violated that and produced vertical shafts tied to the camera. 1.15 keeps the
+  source strictly at the body's projected centre and fades the pass out (`1 - smoothstep(0, 0.5, outside)`) as the
+  disc leaves the frame, zero when it is behind. Never reintroduce a synthetic source.
+- Physics the user wants (their laser-beam analogy): shafts must be visible from any angle, including with the
+  light behind. Screen-space rays cannot do that — they march the picture toward the disc and need it in frame.
+  The honest effect is the volumetric pass (fog), which evaluates in-scattering per point along the view ray.
+  `volumetric.wgsl` used `frame.sun_direction` for the phase, so moon shafts never worked; it uses
+  `frame.light_direction` now, and `fog_light` (0..3) scales the in-scattering.
+- Cloud shadows are procedural, not tied to the engine's clouds: `cloud_shade()` follows the light ray to the
+  192-block layer, samples the pack's own fbm there and drifts with time. It reads as patches moving over the land
+  but will not line up with the visible clouds; the engine's cloud geometry is not reachable from a pack stage. The
+  `cloud_shadows` option (0..1) scales it.
+- Cloud shadows were invisible at 10% of the base colour: in this pack the terrain's light is mostly vanilla's
+  sky term, and the sun add-on is only ~18%, so shading that add-on alone is imperceptible. Cloud shade now takes
+  35% of the base (`1 - 0.35 * clouds`) plus 85% of the direct term.
+- Cloud-shade coverage was a fifth of the sky because `fbm2` averages ~0.38 while the threshold started at 0.42.
+  Now `smoothstep(0.28, 0.55, n)` at frequency 0.010: about half the sky shaded, patches ~100 blocks.
+- Hit the format's 64-option limit at 1.20.0. Dropped `Dither` (dithering is unconditional in the last pass) to
+  fit `cloud_shadow_size` and `cloud_shadow_cover`. Next additions must remove or merge an option first.
+- Cloud shadows run at night off the moon at full weight — the user explicitly rejected damping them by night
+  ("не надо"). Since the shade is a fraction of the base colour it already scales with how dark the scene is.
+- `cloud_shadow_size` was inverted from the start in feel: the useful values are small. Range is 0.02..1.0 now
+  (default 0.35, step 0.01), where 1.0 is already a hillside-sized patch. Slider magnitudes should follow what the
+  eye sees, not the internal multiplier.
+- 1.25.0: defaults re-baked from the user's file again — cloud_shadow_size 0.27, colored_light 1.0,
+  water_glints 0.05, cloud_edges 10, moon_rays_strength 0.35 (wave_size 0.4, saturation 0.45, glint_lines 0.1,
+  caustics 0.65 were already the defaults). Fog was reset to its own defaults first (on / 0.35 / 42 / 1.0 / 8).
+- 1.26.0 defaults from the user's water tuning: cloud_shadows 0.6, waves ON, wave_size 0.68, wave_length 2,
+  water_glints 0.15, volumetric fog OFF, fog_density 1, fog_light 3, fog_steps 16. Baking is scripted against
+  `tomllib` so bools and choices format correctly.
+- In-game reset is per-pack only (`Item::Reset` -> `reset_options()`); `step_option` is always called with
+  `reset = false`, so a per-option or per-page reset cannot exist in the pack format. `tools/options.py` covers it:
+  `reset --page <id>` (ids from `pages`), `reset` / `reset --all`, and `show` for what differs from the defaults
+  (numeric comparison, so float formatting does not produce false positives).

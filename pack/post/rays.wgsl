@@ -4,18 +4,23 @@
 
 override sun_rays: f32 = 0.5;
 
-// Where the sun is: xy its UV (may be far outside 0..1), z 1 when it is in front of the camera.
+// Where the light is: xy its UV, z how visible the shafts should be there (0 gone, 1 full). The source
+// is the body's real projected centre and nothing else: a faked source at the screen edge, which this
+// pass used to place when the body went behind, made the shafts swing round and look vertical, tied to
+// the camera rather than to the sky.
 fn sun_screen() -> vec3<f32> {
     let view = frame.view * vec4<f32>(frame.light_direction, 0.0);
     let clip = frame.projection * view;
     if clip.w <= 0.0001 {
+        // Behind the camera there is no disc to come out of, so there are no shafts either.
         return vec3<f32>(0.5, 0.5, 0.0);
     }
     let ndc = clip.xy / clip.w;
     let uv = ndc * vec2<f32>(0.5, -0.5) + vec2<f32>(0.5);
-    // A sun almost beside the camera has no usable screen direction; anything short of that is fine.
-    let sane = all(uv > vec2<f32>(-3.0)) && all(uv < vec2<f32>(4.0));
-    return vec3<f32>(uv, select(0.0, 1.0, sane));
+    // Full while the disc is inside the frame, fading over the first half screen as it leaves it.
+    let outside = max(max(-uv.x, uv.x - 1.0), max(-uv.y, uv.y - 1.0));
+    let visible = 1.0 - smoothstep(0.0, 0.5, outside);
+    return vec3<f32>(uv, visible);
 }
 
 fn post(input: PostInput) -> vec4<f32> {
@@ -23,7 +28,7 @@ fn post(input: PostInput) -> vec4<f32> {
         return vec4<f32>(0.0, 0.0, 0.0, 1.0);
     }
     let sun = sun_screen();
-    if sun.z < 1.0 {
+    if sun.z <= 0.0 {
         return vec4<f32>(0.0, 0.0, 0.0, 1.0);
     }
     let toward_sun = sun.xy - input.uv;
@@ -46,5 +51,5 @@ fn post(input: PostInput) -> vec4<f32> {
         let falloff = 1.0 - t;
         sum += sky * falloff * falloff;
     }
-    return vec4<f32>(vec3<f32>(sum / 24.0 * 2.6), 1.0);
+    return vec4<f32>(vec3<f32>(sum / 24.0 * 2.6 * sun.z), 1.0);
 }

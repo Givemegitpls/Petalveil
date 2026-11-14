@@ -48,10 +48,31 @@ def load_values(path: Path) -> dict[str, str]:
     return values
 
 
+def same(a: str, b: str) -> bool:
+    """Whether two saved values mean the same, without caring about float formatting."""
+    try:
+        return abs(float(a) - float(b)) < 1e-6
+    except ValueError:
+        return a == b
+
+
 def save_values(path: Path, values: dict[str, str], defaults: dict[str, str]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    lines = [f"{k}={v}\n" for k, v in values.items() if v != defaults.get(k)]
+    lines = [f"{k}={v}\n" for k, v in values.items() if not same(v, defaults.get(k, ""))]
     path.write_text("".join(lines))
+
+
+def load_pages(manifest: Path) -> dict[str, list[str]]:
+    """Each page of the options screen, as the option ids it lists directly (links are not followed)."""
+    with manifest.open("rb") as f:
+        data = tomllib.load(f)
+    known = {entry["id"] for entry in data.get("options", [])}
+    pages: dict[str, list[str]] = {}
+    for page in data.get("pages", []):
+        items = [item for item in page.get("items", []) if item in known]
+        if items:
+            pages[page["id"]] = items
+    return pages
 
 
 def default_text(option: dict) -> str:
@@ -114,6 +135,10 @@ def main() -> int:
     set_.add_argument("pairs", nargs="+", metavar="ID VALUE")
     reset = sub.add_parser("reset", help="drop values, back to the pack's defaults")
     reset.add_argument("ids", nargs="*")
+    reset.add_argument("--page", help="reset every option on this page of the options screen")
+    reset.add_argument("--all", action="store_true", help="reset the whole pack (the same as Reset in the game)")
+    show = sub.add_parser("show", help="only the options that differ from the pack's defaults")
+    show.add_argument("--page", help="restrict to one page")
 
     args = parser.parse_args()
     options = load_options(args.manifest)
@@ -131,6 +156,18 @@ def main() -> int:
         print(values.get(args.id, defaults[args.id]))
         return 0
 
+    if args.command == "show":
+        pages = load_pages(args.manifest)
+        ids = pages.get(args.page) if args.page else None
+        if args.page and ids is None:
+            raise SystemExit(f"no such page: {args.page} (have {', '.join(pages)})")
+        for key, option in options.items():
+            if ids is not None and key not in ids:
+                continue
+            if key in values and not same(values[key], defaults[key]):
+                print(describe(option, values[key]))
+        return 0
+
     if args.command == "set":
         if len(args.pairs) % 2:
             raise SystemExit("set expects id value pairs")
@@ -140,10 +177,17 @@ def main() -> int:
                 raise SystemExit(f"no such option: {key}" + (f" (did you mean {', '.join(close)}?)" if close else ""))
             values[key] = coerce(options[key], raw)
     else:
-        for key in args.ids or list(options):
+        targets = list(args.ids)
+        if args.page:
+            pages = load_pages(args.manifest)
+            if args.page not in pages:
+                raise SystemExit(f"no such page: {args.page} (have {', '.join(pages)})")
+            targets += pages[args.page]
+        if args.all or (not targets):
+            targets = list(options)
+            print("every option reset to the pack's defaults")
+        for key in targets:
             values.pop(key, None)
-        if not args.ids:
-            print("all options reset to the pack's defaults")
 
     save_values(args.file, values, defaults)
     print(f"wrote {args.file}")

@@ -1,7 +1,7 @@
 schema = 1
 id = "petalveil"
 name = "Petalveil"
-version = "1.11.0"
+version = "1.26.0"
 api = "0.1"
 description = "Vanilla's own light kept as the base: sun shadows only touch the light from the sky, so caves, torchlight and night stay vanilla-bright. On top of that a pastel sky, rounded cubic clouds, waves and reflections on water, plants in the wind, and a soft glow."
 authors = ["BarmaleyVIP"]
@@ -145,7 +145,7 @@ items = ["page:lighting", "page:water", "page:nature", "page:sky", "page:fog", "
 id = "lighting"
 name = "Lighting"
 description = "Shadows and how much the sun adds to vanilla's own light."
-items = ["shadows", "shadow_softness", "shadow_resolution", "shadow_distance", "shadow_strength", "moon_shadows", "moon_shadow_strength", "sun_strength", "colored_light", ""]
+items = ["shadows", "shadow_softness", "shadow_resolution", "shadow_distance", "shadow_strength", "moon_shadows", "moon_shadow_strength", "cloud_shadows", "cloud_shadow_size", "cloud_shadow_cover", "sun_strength", "colored_light", ""]
 
 [[pages]]
 id = "water"
@@ -187,13 +187,13 @@ items = ["sky_pastel", "cloud_edges", "rainbow", "night_mood", ""]
 id = "fog"
 name = "Fog"
 description = "Volumetric fog: light shafts in forests and valleys, and how thick the air is."
-items = ["volumetric_fog", "fog_density", "fog_height", "fog_steps", ""]
+items = ["volumetric_fog", "fog_density", "fog_height", "fog_light", "fog_steps", ""]
 
 [[pages]]
 id = "camera"
 name = "Camera"
 description = "Edge smoothing, glow, sun rays and the colour grade."
-items = ["bloom", "sun_rays", "moon_rays", "moon_rays_strength", "exposure", "contrast", "saturation", "vignette", "dither"]
+items = ["bloom", "sun_rays", "moon_rays", "moon_rays_strength", "exposure", "contrast", "saturation", "vignette"]
 
 [[options]]
 id = "shadows"
@@ -237,6 +237,36 @@ max = 3.0
 step = 0.05
 
 [[options]]
+id = "cloud_shadows"
+name = "Cloud shadows"
+description = "Broad patches of shade drifting over the land as clouds pass the light. The pattern is the pack's own, so it does not line up with the clouds in the sky; 0 turns it off."
+type = "float"
+default = 0.6
+min = 0.0
+max = 1.0
+step = 0.05
+
+[[options]]
+id = "cloud_shadow_size"
+name = "Cloud shadow size"
+description = "Patch size: 0.02 is a fine broken sky, 0.35 is the pack's own, 1 stretches one shadow over a whole hillside."
+type = "float"
+default = 0.27
+min = 0.02
+max = 1.0
+step = 0.01
+
+[[options]]
+id = "cloud_shadow_cover"
+name = "Cloud shadow cover"
+description = "How much of the sky is shaded: 0 is a few sparse patches, 1 is nearly overcast."
+type = "float"
+default = 0.5
+min = 0.0
+max = 1.0
+step = 0.02
+
+[[options]]
 id = "sun_strength"
 name = "Sunlight"
 description = "How much the sun adds on top of vanilla's light. 0 leaves vanilla's brightness alone."
@@ -268,7 +298,7 @@ id = "colored_light"
 name = "Coloured light"
 description = "A hue shift on block light: torches warmer, soul fire blue. Brightness stays vanilla's."
 type = "float"
-default = 0.0
+default = 1.0
 min = 0.0
 max = 1.0
 step = 0.05
@@ -284,14 +314,14 @@ default = true
 id = "water_waves"
 name = "Waves"
 type = "bool"
-default = false
+default = true
 
 [[options]]
 id = "wave_size"
 name = "Wave height"
 description = "The swell's height and its tilt, from 0 (flat) to 1 (a visible chop). The length is a separate slider; the fine detail is Ripples."
 type = "float"
-default = 0.4
+default = 0.68
 min = 0.0
 max = 1.0
 step = 0.01
@@ -308,7 +338,7 @@ id = "wave_length"
 name = "Wave length"
 description = "How long the swell is: 0.25 is a short chop, 1 is the pack's own, 4 stretches one wave over several blocks."
 type = "float"
-default = 1.4
+default = 2
 min = 0.25
 max = 4.0
 step = 0.05
@@ -439,7 +469,7 @@ id = "water_glints"
 name = "Sun glitter"
 description = "Small sparkles of sunlight on the surface, on top of the broad glint. 0 leaves only the smooth highlight."
 type = "float"
-default = 0.1
+default = 0.15
 min = 0.0
 max = 4.0
 step = 0.05
@@ -628,7 +658,7 @@ id = "cloud_edges"
 name = "Cloud edge blur"
 description = "Radius, in pixels, of the blur on vanilla's cloud rims. Higher is softer. Only the clouds are affected; 5 is the pack's default, 0 turns it off."
 type = "float"
-default = 5.0
+default = 10.0
 min = 0.0
 max = 64.0
 step = 1.0
@@ -638,14 +668,14 @@ id = "volumetric_fog"
 name = "Volumetric fog"
 description = "Fog lit by the sun through the shadows: shafts of light in a forest or a valley. Off by default; it is the costliest option in the pack."
 type = "bool"
-default = true
+default = false
 
 [[options]]
 id = "fog_density"
 name = "Fog thickness"
 description = "How thick the air is. Vanilla's own fog stays on either way."
 type = "float"
-default = 0.35
+default = 1
 min = 0.0
 max = 1.0
 step = 0.05
@@ -661,12 +691,22 @@ max = 64.0
 step = 2.0
 
 [[options]]
+id = "fog_light"
+name = "Fog light shafts"
+description = "How strongly the sun and the moon light the air along their shadows: this is what makes shafts visible from any angle, including with the light behind you. 0 leaves a plain haze."
+type = "float"
+default = 3
+min = 0.0
+max = 3.0
+step = 0.05
+
+[[options]]
 id = "fog_steps"
 name = "Fog detail"
 description = "Steps of the march. 8 is cheap and reads the same in motion; 16 is for still screenshots."
 type = "choice"
 values = ["8", "16"]
-default = "8"
+default = "16"
 
 [[options]]
 id = "bloom"
@@ -680,8 +720,8 @@ step = 0.05
 
 [[options]]
 id = "sun_rays"
-name = "Rays"
-description = "Light spilling from the sun at sunrise and sunset, and from the moon at night."
+name = "Sun rays"
+description = "Light spilling from the sun at sunrise and sunset."
 type = "float"
 default = 0.5
 min = 0.0
@@ -700,7 +740,7 @@ id = "moon_rays_strength"
 name = "Moon rays strength"
 description = "How strong the moon's rays are. The sun's own is Rays strength."
 type = "float"
-default = 0.5
+default = 0.35
 min = 0.0
 max = 1.5
 step = 0.05
@@ -731,13 +771,6 @@ default = 1.06
 min = 0.8
 max = 1.4
 step = 0.02
-
-[[options]]
-id = "dither"
-name = "Dither"
-description = "Half a step of noise that breaks banding in smooth gradients. Off, a sky gradient may band on an 8-bit screen; on, it is a barely visible film grain."
-type = "bool"
-default = true
 
 [[options]]
 id = "vignette"
