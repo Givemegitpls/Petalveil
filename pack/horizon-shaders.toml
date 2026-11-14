@@ -1,7 +1,7 @@
 schema = 1
 id = "petalveil"
 name = "Petalveil"
-version = "0.54.0"
+version = "0.69.0"
 api = "0.1"
 description = "Vanilla's own light kept as the base: sun shadows only touch the light from the sky, so caves, torchlight and night stay vanilla-bright. On top of that a pastel sky, rounded cubic clouds, waves and reflections on water, plants in the wind, and a soft glow."
 authors = ["BarmaleyVIP"]
@@ -170,7 +170,7 @@ items = ["water_saturation", "water_hue", "water_opacity", "underwater_murk", "w
 id = "water_detail"
 name = "Light"
 description = "Sun glitter on the surface and the caustics on the bed."
-items = ["glints", "water_glints", "glint_speed", "glint_size", "glint_lines", "glint_blur", "caustics", "water_caustics", "caustic_speed", "caustic_size", "caustic_lines", ""]
+items = ["glints", "water_glints", "glint_speed", "glint_size", "glint_lines", "glint_blur", "caustics", "water_caustics", "caustic_speed", "caustic_fade", "caustic_blur", "caustic_size", "caustic_lines", ""]
 
 [[pages]]
 id = "nature"
@@ -347,10 +347,9 @@ step = 0.1
 [[options]]
 id = "rain_ripples"
 name = "Rain rings"
-description = "The game draws its own rings on wet water. Vanilla keeps those alone; the pack's own adds its rings on top and leaves the vanilla ones where they are."
-type = "choice"
-values = ["Vanilla", "Pack's own"]
-default = "Vanilla"
+description = "The pack's own rings on wet water. The game draws its own as rain particles: to drop those, set Options > Video Settings > Particles to Minimal (the rain sound stays)."
+type = "bool"
+default = true
 
 [[options]]
 id = "ring_strength"
@@ -452,9 +451,9 @@ step = 0.1
 [[options]]
 id = "glint_lines"
 name = "Glitter lines"
-description = "Thickness of the bright strands the sparkles are cut from: smaller is finer and sparser."
+description = "The core the spark is cut from: smaller is finer and sparser, and it sets where the fade starts."
 type = "float"
-default = 0.08
+default = 0.06
 min = 0.02
 max = 0.3
 step = 0.01
@@ -462,11 +461,11 @@ step = 0.01
 [[options]]
 id = "glint_blur"
 name = "Glitter blur"
-description = "How hard a strand is pressed into a point: below 0.35 it sharpens into a pinprick, above it spreads into a bloom, and past 1 it keeps spreading."
+description = "How wide the fade from a bright spark to the dark water is: 0 is a crisp pinprick, 3 melts the sparks into a soft glow. The same meaning as Caustics blur."
 type = "float"
-default = 0.8
+default = 0.6
 min = 0.0
-max = 1.5
+max = 3.0
 step = 0.05
 
 [[options]]
@@ -495,6 +494,26 @@ default = 1.0
 min = 0.0
 max = 9.0
 step = 0.1
+
+[[options]]
+id = "caustic_fade"
+name = "Caustics depth fade"
+description = "How fast caustics die with depth: 0 keeps them to any depth, 1 is the pack's own, 3 confines them to the shallows."
+type = "float"
+default = 1.0
+min = 0.0
+max = 3.0
+step = 0.05
+
+[[options]]
+id = "caustic_blur"
+name = "Caustics blur"
+description = "How wide the fade from a bright strand to the dark bed is: 0 is a crisp web, 3 melts it into a soft glow. Costs nothing extra."
+type = "float"
+default = 0.0
+min = 0.0
+max = 3.0
+step = 0.05
 
 [[options]]
 id = "caustic_size"

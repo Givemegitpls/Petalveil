@@ -50,6 +50,23 @@ fn shadow_at(p: vec3<f32>, offset_dir: vec3<f32>, ndl: f32) -> f32 {
     return mix(lit, 1.0, smoothstep(0.85, 1.0, dist / frame.shadow_distance));
 }
 
+// 1 where a translucent surface (water, stained glass, ice) stands between this point and the light: the
+// point is lit in the solid map but shadowed in the map that also holds the translucent terrain. That is
+// how a block under water is recognised on the CPU-free side, and it works whether the eye is above the
+// water or in it.
+fn under_translucent(p: vec3<f32>) -> f32 {
+    if frame.has_shadow == 0u {
+        return 0.0;
+    }
+    let s = shadow_position(p);
+    if any(s.xy <= vec2<f32>(0.0)) || any(s.xy >= vec2<f32>(1.0)) || s.z >= 1.0 {
+        return 0.0;
+    }
+    let solid = textureSampleCompareLevel(shadow_map, shadow_sampler, s.xy, s.z);
+    let through = textureSampleCompareLevel(shadow_map_translucent, shadow_sampler, s.xy, s.z);
+    return clamp(solid - through, 0.0, 1.0);
+}
+
 fn lit_terrain(input: MaterialInput) -> vec4<f32> {
     let albedo = input.albedo.rgb;
     let tint = input.tint.rgb;
@@ -99,6 +116,19 @@ fn lit_terrain(input: MaterialInput) -> vec4<f32> {
         let unit = cl.rgb / max(max(cl.r, max(cl.g, cl.b)), 0.001);
         let shift = clamp(cl.a, 0.0, 1.0) * colored_light * 0.6;
         color = color * mix(vec3<f32>(1.0), unit, shift);
+    }
+
+    // Caustics belong to the blocks under the water, never to the water's own surface: they are sunlight
+    // that came through the surface and broke up on the bottom.
+    if caustics && water_caustics > 0.0 {
+        let under = under_translucent(input.position);
+        if under > 0.0 {
+            let sun_lit = 0.35 + 0.65 * smoothstep(0.0, 0.35, frame.sun_direction.y);
+            let reach = exp(-length(input.position) * caustic_fade * 0.03) * sun_lit * under;
+            let net = caustic_triplanar(input.position + frame.camera_position, n, frame.time * caustic_speed,
+                1.0 / max(caustic_size, 0.05), caustic_lines);
+            color *= 1.0 + net * water_caustics * reach * 1.3;
+        }
     }
 
     // A block that shines keeps shining: redstone, glowstone and lava.

@@ -181,3 +181,44 @@ fn ripple_slope(p: vec2<f32>, t: f32, cell_size: f32, thickness: f32) -> vec2<f3
     let present = step(0.3, hash21(cell + vec2<f32>(41.0, 2.0)));
     return f / max(r, 0.001) * ring * 1.2 * present;
 }
+
+// Caustics: the pack's own net, shared by the water surface (which lights the bed it sees through the
+// water) and the composite (which lights the bed around a submerged camera).
+override caustics: bool = true;
+override water_caustics: f32 = 1.0;
+override caustic_size: f32 = 1.0;
+override caustic_lines: f32 = 0.2;
+override caustic_speed: f32 = 1.0;
+override caustic_fade: f32 = 1.0;
+override caustic_blur: f32 = 0.0;
+
+// The ridge field both the caustics and the glitter are made of. Two independent noises, drifting in
+// different directions, with different spatial frequencies: their difference is average almost
+// everywhere but cancels along thin lines where the two happen to match. Inverting it turns those
+// lines into a bright net — that is the pattern the sun draws on a bed under moving water.
+// `scale` is the net's cell size, `lines` the strands' thickness, `speed` how fast it drifts.
+fn ridge_net(xz: vec2<f32>, t: f32, scale: f32, lines: f32, speed: f32, blur: f32) -> f32 {
+    let a = value_noise(xz * 1.7 * scale + vec2<f32>(t * 0.25, t * 0.18) * speed);
+    let b = value_noise(xz * 2.3 * scale + vec2<f32>(-t * 0.21, t * 0.16) * speed + vec2<f32>(7.3, 2.9));
+    // `blur` widens the ramp the strand fades over and softens its core, which costs nothing more than
+    // the ramp itself: a spatial blur would need several more noise samples per pixel. Both the caustics
+    // and the glitter pass their slider here, so the two sliders mean exactly the same thing.
+    let soft = clamp(blur, 0.0, 3.0);
+    return 1.0 - smoothstep(lines * max(0.15 - 0.15 * soft, 0.0), lines * (1.0 + 0.9 * soft), abs(a - b));
+}
+
+// Caustics on the bed: the net as it is.
+fn caustic_net(xz: vec2<f32>, t: f32, scale: f32, lines: f32) -> f32 {
+    return ridge_net(xz, t, scale, lines, caustic_speed, caustic_blur);
+}
+
+// The net on a surface of any orientation. Sampled on xz alone it runs as constant stripes down a
+// vertical face; a triplanar blend, weighted by the surface's normal, keeps the pattern isotropic.
+fn caustic_triplanar(p: vec3<f32>, n: vec3<f32>, t: f32, scale: f32, lines: f32) -> f32 {
+    let w = abs(n) + vec3<f32>(0.0001);
+    let top = caustic_net(p.xz, t, scale, lines) * w.y;
+    let side_x = caustic_net(p.zy, t, scale, lines) * w.x;
+    let side_z = caustic_net(p.xy, t, scale, lines) * w.z;
+    return (top + side_x + side_z) / (w.x + w.y + w.z);
+}
+

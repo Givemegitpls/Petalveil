@@ -9,6 +9,7 @@ override water_ripples: f32 = 1.0;
 override ripple_speed: f32 = 1.0;
 override water_opacity: f32 = 1.0;
 override water_saturation: f32 = 1.0;
+override water_hue: f32 = 0.0;
 override water_clarity: f32 = 0.5;
 override water_texture: bool = true;
 override glints: bool = true;
@@ -17,14 +18,7 @@ override glint_size: f32 = 10.0;
 override glint_lines: f32 = 0.08;
 override glint_blur: f32 = 0.75;
 override glint_speed: f32 = 1.0;
-override caustics: bool = true;
-override water_caustics: f32 = 1.0;
-override caustic_size: f32 = 1.0;
-override caustic_lines: f32 = 0.2;
-override caustic_speed: f32 = 1.0;
-override water_hue: f32 = 0.0;
-// Index into "Vanilla" (0) and "Pack's own" (1).
-override rain_ripples: u32 = 0u;
+override rain_ripples: bool = true;
 override ring_strength: f32 = 1.0;
 override ring_size: f32 = 1.0;
 override ring_lines: f32 = 1.0;
@@ -38,13 +32,17 @@ fn hue_turn(c: vec3<f32>, degrees_amount: f32) -> vec3<f32> {
 }
 
 // The distance of the point behind the water: what the bed's depth in the picture is.
+fn view_at(screen: vec2<f32>, depth: f32) -> vec3<f32> {
+    let clip = vec4<f32>(screen.x * 2.0 - 1.0, 1.0 - screen.y * 2.0, depth, 1.0);
+    let view = frame.projection_inverse * clip;
+    return view.xyz / view.w;
+}
+
 fn depth_distance(screen: vec2<f32>, depth: f32) -> f32 {
     if depth <= 0.0 {
         return 1e4;
     }
-    let clip = vec4<f32>(screen.x * 2.0 - 1.0, 1.0 - screen.y * 2.0, depth, 1.0);
-    let view = frame.projection_inverse * clip;
-    return length(view.xyz / view.w);
+    return length(view_at(screen, depth));
 }
 
 // A cheap sky, for when the mirror is off or the surface is not the top: the fog and sky colours
@@ -56,53 +54,11 @@ fn sky_reflection(r: vec3<f32>) -> vec3<f32> {
     return c;
 }
 
-// The ridge field both the caustics and the glitter are made of. Two independent noises, drifting in
-// different directions, with different spatial frequencies: their difference is average almost
-// everywhere but cancels along thin lines where the two happen to match. Inverting it turns those
-// lines into a bright net — that is the pattern the sun draws on a bed under moving water.
-// `scale` is the net's cell size, `lines` the strands' thickness, `speed` how fast it drifts.
-fn ridge_net(xz: vec2<f32>, t: f32, scale: f32, lines: f32, speed: f32) -> f32 {
-    let a = value_noise(xz * 1.7 * scale + vec2<f32>(t * 0.25, t * 0.18) * speed);
-    let b = value_noise(xz * 2.3 * scale + vec2<f32>(-t * 0.21, t * 0.16) * speed + vec2<f32>(7.3, 2.9));
-    return 1.0 - smoothstep(lines * 0.15, lines, abs(a - b));
-}
-
-// Caustics on the bed: the net as it is.
-fn caustic_net(xz: vec2<f32>, t: f32, scale: f32, lines: f32) -> f32 {
-    return ridge_net(xz, t, scale, lines, caustic_speed);
-}
-
-// Sun glitter on the surface: the same net, much finer and faster. `lines` sets the strand's
-// thickness and `blur` how hard the strand is pressed into a point: a high exponent keeps only the
-// core (a sharp spark), a low one leaves the strand's body (a soft glow). The exponent spans 12 down
-// to 0.75, and a soft setting also widens the strand, so the slider has real travel at both ends.
-// The soft half of the slider used to be squeezed into its top 15%, where it was the only usable part.
-// Now the sharpening zone is the bottom 35% and everything above is spread: the exponent walks 3.56 down
-// to 0.5 and a coarser copy of the same net fades in, so the whole upper half is a real range.
-const BLUR_SPLIT: f32 = 0.35;
-
+// Sun glitter: the same ridge as the caustics, only finer and faster, with the same `1 - smoothstep`
+// ramp — so its blur slider means exactly what the caustics' one means: how wide the fade from bright to
+// dim is.
 fn sparkle(xz: vec2<f32>, t: f32, scale: f32, lines: f32, blur: f32) -> f32 {
-    let b = clamp(blur, 0.0, 1.5);
-    let over = clamp((b - 1.0) / 0.5, 0.0, 1.0);
-    let w = clamp((b - BLUR_SPLIT) / (1.0 - BLUR_SPLIT), 0.0, 1.0);
-    var exponent = 3.56;
-    if b <= BLUR_SPLIT {
-        exponent = 24.0 + (3.56 - 24.0) * (1.0 - b / BLUR_SPLIT);
-    } else if b <= 1.0 {
-        exponent = 3.56 + (0.5 - 3.56) * w;
-    } else {
-        // Past 1 the pack keeps spreading instead of stopping: the field flattens further and the
-        // coarser copy grows wider still, which is what the player reached for.
-        exponent = 0.5 + (0.2 - 0.5) * over;
-    }
-    var dots = pow(ridge_net(xz, t, scale, lines, 3.0 * glint_speed), exponent);
-    if b > BLUR_SPLIT {
-        let wide_scale = mix(scale * 0.55, scale * 0.30, over);
-        let wide_lines = mix(lines * 1.6, lines * 2.6, over);
-        let wide = pow(ridge_net(xz, t, wide_scale, wide_lines, 3.0 * glint_speed), exponent);
-        dots = mix(dots, wide, w * w);
-    }
-    return dots;
+    return ridge_net(xz, t, scale, lines, 3.0 * glint_speed, blur);
 }
 
 fn water_surface(input: MaterialInput) -> vec4<f32> {
@@ -135,6 +91,7 @@ fn water_surface(input: MaterialInput) -> vec4<f32> {
     // How strong the rain rings are here: they are also shaded, not only warped, or they stay invisible
     // while the mirror is off.
     var ring_shade = 0.0;
+
     if top && water_waves {
         let wt = t * wave_speed;
         n = water_normal(world.xz, wt, t * ripple_speed, storm, chop_amount, wave_size);
@@ -146,14 +103,18 @@ fn water_surface(input: MaterialInput) -> vec4<f32> {
     }
     // Rain rings, the pack's own, only when the player asked for them and only while the world is wet.
     if top {
+        let gain = select(0.0, 1.0, rain_ripples);
+        // `wetness` dries asymptotically and sits just above zero for a while; a hard floor means the
+        // rings stop as soon as the rain does, instead of lingering at a few percent for minutes.
+        let wet = smoothstep(0.06, 0.4, frame.wetness);
         let rt = t * ring_speed;
-        let rings = select(0.0, 0.55 * ring_strength * frame.wetness, rain_ripples == 1u);
+        let rings = 0.55 * ring_strength * wet * gain;
         let rip = ripple_slope(world.xz, rt, ring_size, ring_lines) * rings;
         n = normalize(n + vec3<f32>(-rip.x, 0.0, -rip.y));
         // The rings' share of the bend is the rings' own: `Ripples` must not touch it, or the chop slider
         // ends up driving the rain circles.
         bend += ripple_slope(world.xz * 0.8, rt, ring_size, ring_lines)
-            * select(0.0, 0.035 * ring_strength * frame.wetness, rain_ripples == 1u);
+            * (0.035 * ring_strength * wet * gain);
         // The fine chop gets its own bend, so `Ripples` has something to move near the camera even with the
         // mirror off: this is the only channel a normal has left when nothing is reflected.
         let xl = world.xz / max(ripple_length, 0.05);
@@ -206,13 +167,6 @@ fn water_surface(input: MaterialInput) -> vec4<f32> {
     let thickness = max(depth_distance(bent_uv, textureLoad(opaque_depth, bent_at, 0)) - length(input.position), 0.0);
     let reach = mix(2.0, 12.0, water_clarity);
 
-    // The sun draws its net on the bed: bright where the two noises cancel, fading with depth and with
-    // the sun's own reach.
-    if caustics && water_caustics > 0.0 {
-        let net = caustic_net(world.xz, t, 1.0 / max(caustic_size, 0.05), caustic_lines);
-        let fade = exp(-thickness / max(reach * 1.6, 0.5)) * (0.35 + 0.65 * smoothstep(0.0, 0.35, frame.sun_direction.y));
-        behind *= 1.0 + net * water_caustics * fade * 0.9;
-    }
     // Shallow water is the bed with a turquoise cast; deep water is its own colour, darkening with depth.
     let deep = 1.0 - exp(-thickness / reach);
     let shallow = vanilla * 1.06 + unit * vec3<f32>(0.10, 0.30, 0.32) * 0.35 * light;

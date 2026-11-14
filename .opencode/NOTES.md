@@ -204,3 +204,46 @@
 - `water_normal` takes two clocks now (`t` for the swell, `tr` for the chop) plus `ripple_speed`, so the chop's
   animation is independent. Watch out for WGSL scope: the rings block already declares `rt`, a second `rt` in the
   same `if top { ... }` is a redefinition error.
+- Vanilla rain rings are particles, not geometry: `render_tick.rs` (`tickWeatherEffects`) spawns splashes gated by
+  `settings.particles`; at 2 (Minimal) it breaks after the first spot, so none are drawn and the sound stays. A pack
+  cannot touch particles at all in API 0.1. The only ways: the game setting, or a resource pack blanking the
+  `particle/*splash*` sprite. The user decided to leave it as is.
+- `rain_ripples` is a plain bool again (the user asked for a checkbox): on draws the pack's rings at full
+  strength, off hides them. The three-way Vanilla/Hybrid/Own experiment was dropped. The option's description
+  tells the player that the game's own rings are rain particles and go away with `Particles = Minimal`.
+- Caustics depth falloff is a slider now (`caustic_fade`, 0..3, default 1): `exp(-thickness * fade / (reach*1.6))`,
+  on top of the sun-elevation factor. 0 keeps the net to any depth.
+- Caustics work under water too: the net (`ridge_net` / `caustic_net`) and its options live in `common.wgsl` now,
+  so both stages can use them — the material pass lights the bed seen through the surface, and the composite adds
+  the same net at `frame.in_water > 0` (distance fade `exp(-len * caustic_fade * 0.08)` instead of thickness).
+- Caustics on the bed alone were invisible from the surface with a low `water_clarity` (the bed's share is
+  `absorb = exp(-thickness/reach * 1.6)`), which made them look like an underwater-only effect. The net now also
+  multiplies the water's own colour by a softer share (`caustic_gain * 0.45`).
+- Caustic stripes down walls happened because the net was sampled on xz only. `caustic_triplanar(p, n, ...)`
+  blends the three planes by |n|; the surface normal is rebuilt from two neighbour depths in both stages. Guard
+  the cross product: on a flat stretch it vanishes and `normalize` would return NaN (black squares).
+- Lesson: caustics belong to the bed only. Applying the same net to the water's own colour (a workaround for
+  `water_clarity` 0.25 hiding the bed) painted a pattern on the water plane that read as glued to the camera.
+  Retuned instead: the bed's share is 1.3; whether they show from above follows the water's real transparency.
+- The above-water caustics slid with the camera because the net's position came from `opaque_depth`: when that
+  depth is missing in the material stage the point lands on the far plane and follows the eye. Fixed by anchoring
+  the surface path to the water's own `world` position only — never to the bed's depth. The underwater path keeps
+  the depth-based position because there the pixel *is* the bed, which is also why the two differ by design.
+- Correct architecture for caustics, finally: shade the *blocks*, not the water. A terrain point is under water
+  when it is lit in `shadow_map` but shadowed in `shadow_map_translucent` (the map that also holds water and
+  glass) — `under_translucent()` in `lighting.wgsl`. The net is then applied in `lit_terrain` with the block's own
+  normal, so it follows the block faces, works above and below the surface, and can never appear on the water
+  plane. The water stage and the composite no longer draw caustics at all.
+- Consequence: caustics need `Shadows` on (no map, no detection) — say so rather than hiding it.
+- Accepted: caustics on terrain via the translucent shadow map (0.66.0). The user called it "очень круто" — keep this
+  architecture, do not move caustics back into the water or the post pass.
+- `caustic_blur` (0..1, default 0) is not a spatial blur: it widens the smoothstep ramp of `ridge_net`
+  (lo 0.15L -> 0, hi L -> 1.9L). Three extra noise samples per pixel for a real blur was not worth it on terrain,
+  where every pixel pays.
+- Glitter and caustics now share one form: `ridge_net` -> `1 - smoothstep(lo, hi, |a-b|)`, with `blur` (0..1.5)
+  widening the ramp for both (`lo = lines*max(0.15-0.15*soft,0)`, `hi = lines*(1+0.9*soft)`). The old exponent +
+  second-coarse-field code in `sparkle` is gone: it was a historical accident, and the user asked why the two
+  differed. Glitter defaults were retuned (lines 0.06, blur 0.6).
+- Both blurs run 0..3 now (the internal ramp clamp too): past `hi = 1` the smoothstep never saturates, so the net
+  becomes a broad haze — that is the "as smooth as possible" end. Their saved values (0.95 / 0.6) keep meaning
+  what they meant at 1.0/1.5.
