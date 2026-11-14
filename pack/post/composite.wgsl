@@ -13,6 +13,7 @@ override contrast: f32 = 1.03;
 override saturation: f32 = 1.06;
 override vignette: f32 = 0.0;
 override dither: bool = true;
+override underwater_murk: f32 = 0.35;
 
 // Vanilla's clouds are geometry the engine draws, at a fixed height, four blocks thick; a pack has
 // no stage for them. What it can do is find them in the picture: a pixel whose depth puts it in the
@@ -57,10 +58,11 @@ fn cloud_soft(uv: vec2<f32>, radius: f32, seed: f32) -> vec3<f32> {
     var taps = 0.0;
     var sum = vec3<f32>(0.0);
     var wsum = 0.0;
-    for (var i = 0; i < 16; i++) {
+    for (var i = 0; i < 24; i++) {
         let angle = f32(i) * 2.39996323 + seed * 6.2831853;
-        // `r` grows with the square root of the index, so the taps spread evenly over the disc.
-        let r = sqrt((f32(i) + 0.5) / 16.0) * radius;
+        // `r` grows with the square root of the index, so the taps spread evenly over the disc. Twenty
+        // four of them keep a wide radius from opening gaps between samples.
+        let r = sqrt((f32(i) + 0.5) / 24.0) * radius;
         let suv = clamp(uv + vec2<f32>(cos(angle), sin(angle)) * r * px, vec2<f32>(0.0), vec2<f32>(1.0));
         let d = depth_at(suv);
         let cloud = in_cloud_layer(suv, d);
@@ -113,9 +115,9 @@ fn sun_soft(uv: vec2<f32>, radius: f32, seed: f32) -> vec3<f32> {
     let px = 1.0 / frame.resolution;
     var sum = vec3<f32>(0.0);
     var wsum = 0.0;
-    for (var i = 0; i < 12; i++) {
+    for (var i = 0; i < 16; i++) {
         let angle = f32(i) * 2.39996323 + seed * 6.2831853;
-        let r = sqrt((f32(i) + 0.5) / 12.0) * radius;
+        let r = sqrt((f32(i) + 0.5) / 16.0) * radius;
         let suv = clamp(uv + vec2<f32>(cos(angle), sin(angle)) * r * px, vec2<f32>(0.0), vec2<f32>(1.0));
         let w = 1.0 / (1.0 + r * 0.05);
         sum += picture(suv) * w;
@@ -151,6 +153,15 @@ fn post(input: PostInput) -> vec4<f32> {
         if mask > 0.0 {
             c = mix(c, sun_soft(input.uv, sun_blur, ign(floor(input.pixel / vec2<f32>(4.0)) * 4.0)), mask);
         }
+    }
+
+    // Underwater the water eats colour with distance, red first: that is what makes a dive read as a
+    // dive instead of a blue filter. `frame.in_water` is eased, so the surface crossing does not pop.
+    if underwater_murk > 0.0 && frame.in_water > 0.0 {
+        let d = depth_at(input.uv);
+        let far = select(48.0, length(view_position(input.uv, d)), d > 0.0);
+        let absorb = exp(-far * (0.01 + 0.09 * underwater_murk) * vec3<f32>(1.6, 0.75, 0.55) * frame.in_water);
+        c *= absorb;
     }
 
     let day = daylight();

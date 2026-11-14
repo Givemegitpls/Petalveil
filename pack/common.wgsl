@@ -28,6 +28,14 @@ const VANILLA_GAIN: f32 = 1.0;
 
 // Declared here because the material and vertex stages share one module: a wave option belongs to both.
 override water_waves: bool = true;
+// The swell's size: the user wanted it about ten times smaller than the first working version, so the
+// constants below are a tenth of it and this slider is the room to grow.
+override wave_size: f32 = 1.0;
+override wave_speed: f32 = 1.0;
+// How long the swell is: bigger stretches the same pattern over more blocks.
+override wave_length: f32 = 1.0;
+// The fine chop's own wavelength, independent of the swell's.
+override ripple_length: f32 = 1.0;
 // Sunlight's gain, used by the terrain light and by the fog's in-scattering.
 override sun_strength: f32 = 1.0;
 
@@ -122,7 +130,9 @@ fn ign(pixel: vec2<f32>) -> f32 {
 
 // The height of the water surface at world `xz`, 0..1 (1 the crest). It depends on world position
 // only, so neighbouring blocks meet without seams.
-fn wave_field(xz: vec2<f32>, t: f32, storm: f32) -> f32 {
+fn wave_field(xz_world: vec2<f32>, t: f32, storm: f32) -> f32 {
+    // The wavelength is a stretch of the whole pattern, so the height and the speed keep their meaning.
+    let xz = xz_world / max(wave_length, 0.05);
     let speed = 0.5 + 1.6 * storm;
     let w1 = sin(dot(xz, vec2<f32>(0.78, 0.62)) * 0.85 + t * 0.9 * speed);
     let w2 = sin(dot(xz, vec2<f32>(-0.55, 0.83)) * 1.25 + t * 1.2 * speed + 1.7);
@@ -131,27 +141,43 @@ fn wave_field(xz: vec2<f32>, t: f32, storm: f32) -> f32 {
     return clamp(0.5 + (w1 * 0.45 + w2 * 0.3 + w3 * (0.15 + 0.15 * storm) + drift * 0.1) * 0.5, 0.0, 1.0);
 }
 
-// The water surface's normal: the swell's slope from two extra samples, plus fine ripples.
-fn water_normal(xz: vec2<f32>, t: f32, storm: f32) -> vec3<f32> {
+// The water surface's normal: the swell's slope from two extra samples, plus ripples — a coarse
+// layer and a much finer one that only reads close to the eye. `ripples` is the player's slider.
+fn water_normal(xz: vec2<f32>, t: f32, tr: f32, storm: f32, ripples: f32, size: f32) -> vec3<f32> {
     let e = 0.07;
     let h = wave_field(xz, t, storm);
     let dx = (wave_field(xz + vec2<f32>(e, 0.0), t, storm) - h) / e;
     let dz = (wave_field(xz + vec2<f32>(0.0, e), t, storm) - h) / e;
-    let slope = -vec2<f32>(dx, dz) * (0.1 + 0.16 * storm);
+    let slope = -vec2<f32>(dx, dz) * (0.028 + 0.032 * storm) * size;
+    // The chop is sampled at its own wavelength: a stretch here must not touch the swell above.
+    let xl = xz / max(ripple_length, 0.05);
+    // `tr` is the chop's own clock, so its speed is independent of the swell's.
     let micro = vec2<f32>(
-        value_noise(xz * 2.7 + vec2<f32>(t * 0.3, -t * 0.24)) - 0.5,
-        value_noise(xz * 3.3 + vec2<f32>(-t * 0.26, t * 0.29) + 7.0) - 0.5,
-    ) * (0.05 + 0.12 * storm);
-    return normalize(vec3<f32>(slope.x + micro.x, 1.0, slope.y + micro.y));
+        value_noise(xl * 2.7 + vec2<f32>(tr * 0.3, -tr * 0.24)) - 0.5,
+        value_noise(xl * 3.3 + vec2<f32>(-tr * 0.26, tr * 0.29) + 7.0) - 0.5,
+    ) * (0.060 + 0.050 * storm);
+    // The small chop: a few centimetres of wave, invisible from afar and alive up close.
+    let fine = vec2<f32>(
+        value_noise(xl * 7.5 + vec2<f32>(tr * 0.55, tr * 0.2)) - 0.5,
+        value_noise(xl * 9.0 + vec2<f32>(-tr * 0.5, tr * 0.65) + 3.0) - 0.5,
+    ) * 0.035;
+    let detail = (micro + fine) * ripples;
+    return normalize(vec3<f32>(slope.x + detail.x, 1.0, slope.y + detail.y));
 }
 
-// Ring ripples on wet ground: the slope of a field of spreading circles.
-fn ripple_slope(p: vec2<f32>, t: f32) -> vec2<f32> {
-    let cell = floor(p * 1.6);
-    let f = fract(p * 1.6) - 0.5;
-    let phase = fract(t * 0.7 + hash21(cell));
+// Ring ripples: one spreading circle per cell, but each cell has its own centre, its own phase and its
+// own speed, and only some cells have a ring at all. Without that the rings line up on a visible grid.
+fn ripple_slope(p: vec2<f32>, t: f32, cell_size: f32, thickness: f32) -> vec2<f32> {
+    let scaled = p * (1.6 / max(cell_size, 0.05));
+    let cell = floor(scaled);
+    let jitter = vec2<f32>(hash21(cell + vec2<f32>(11.0, 3.0)), hash21(cell + vec2<f32>(23.0, 7.0))) - 0.5;
+    let seed = hash21(cell + vec2<f32>(5.0, 17.0));
+    let f = fract(scaled) - 0.5 - jitter * 0.9;
+    let phase = fract(t * (0.45 + 0.55 * seed) + seed * 13.0);
     let r = length(f);
-    let q = (r - phase * 0.5) * 12.0;
+    // `thickness` widens or narrows the ring itself, without changing how many there are.
+    let q = (r - phase * 0.5) * 12.0 / max(thickness, 0.05);
     let ring = sin((r - phase * 0.5) * 40.0) * exp(-q * q) * (1.0 - phase);
-    return f / max(r, 0.001) * ring * 1.2;
+    let present = step(0.3, hash21(cell + vec2<f32>(41.0, 2.0)));
+    return f / max(r, 0.001) * ring * 1.2 * present;
 }

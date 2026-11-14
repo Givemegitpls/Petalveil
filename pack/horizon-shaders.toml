@@ -1,7 +1,7 @@
 schema = 1
 id = "petalveil"
 name = "Petalveil"
-version = "0.22.0"
+version = "0.54.0"
 api = "0.1"
 description = "Vanilla's own light kept as the base: sun shadows only touch the light from the sky, so caves, torchlight and night stay vanilla-bright. On top of that a pastel sky, rounded cubic clouds, waves and reflections on water, plants in the wind, and a soft glow."
 authors = ["BarmaleyVIP"]
@@ -151,8 +151,26 @@ items = ["shadows", "shadow_softness", "shadow_resolution", "shadow_distance", "
 [[pages]]
 id = "water"
 name = "Water"
-description = "Reflections, waves and how far you see into water."
-items = ["reflections", "water_waves", "water_clarity", ""]
+description = "Surface, colour, and what light does under it."
+items = ["page:water_surface", "page:water_colour", "page:water_detail", ""]
+
+[[pages]]
+id = "water_surface"
+name = "Surface"
+description = "Reflections, the swell and the rain rings."
+items = ["reflections", "water_waves", "wave_size", "wave_length", "wave_speed", "water_texture", "ripples", "water_ripples", "ripple_length", "ripple_speed", "rain_ripples", "ring_strength", "ring_size", "ring_lines", "ring_speed", ""]
+
+[[pages]]
+id = "water_colour"
+name = "Colour"
+description = "How blue the water is, how see-through, and what a dive does."
+items = ["water_saturation", "water_hue", "water_opacity", "underwater_murk", "water_clarity", ""]
+
+[[pages]]
+id = "water_detail"
+name = "Light"
+description = "Sun glitter on the surface and the caustics on the bed."
+items = ["glints", "water_glints", "glint_speed", "glint_size", "glint_lines", "glint_blur", "caustics", "water_caustics", "caustic_speed", "caustic_size", "caustic_lines", ""]
 
 [[pages]]
 id = "nature"
@@ -253,6 +271,272 @@ type = "bool"
 default = true
 
 [[options]]
+id = "wave_size"
+name = "Wave height"
+description = "The swell's height and its tilt, from 0 (flat) to 1 (a visible chop). The length is a separate slider; the fine detail is Ripples."
+type = "float"
+default = 1.0
+min = 0.0
+max = 1.0
+step = 0.01
+
+[[options]]
+id = "water_texture"
+name = "Water texture"
+description = "Vanilla's scrolling water sprite. Off, the surface is the biome's flat colour, and the pack's waves and reflections are the only detail on it."
+type = "bool"
+default = true
+
+[[options]]
+id = "wave_length"
+name = "Wave length"
+description = "How long the swell is: 0.25 is a short chop, 1 is the pack's own, 4 stretches one wave over several blocks."
+type = "float"
+default = 1.0
+min = 0.25
+max = 4.0
+step = 0.05
+
+[[options]]
+id = "wave_speed"
+name = "Wave speed"
+description = "How fast the swell travels and rolls. 0 freezes the surface."
+type = "float"
+default = 1.0
+min = 0.0
+max = 9.0
+step = 0.1
+
+[[options]]
+id = "ripples"
+name = "Ripples"
+description = "The fine chop on the surface. Off hides it whatever its height below."
+type = "bool"
+default = true
+
+[[options]]
+id = "water_ripples"
+name = "Ripple height"
+description = "The fine chop's strength on the surface and in the refraction: 0 is glassy, 2 is lively. Its wavelength is the next slider."
+type = "float"
+default = 1.0
+min = 0.0
+max = 2.0
+step = 0.05
+
+[[options]]
+id = "ripple_length"
+name = "Ripple length"
+description = "The fine chop's wavelength: 0.25 is a tight shimmer, 1 is the pack's own, 4 stretches it into wide soft ripples."
+type = "float"
+default = 1.0
+min = 0.25
+max = 4.0
+step = 0.05
+
+[[options]]
+id = "ripple_speed"
+name = "Ripple speed"
+description = "How fast the fine chop drifts. 0 freezes it, independent of the swell's speed."
+type = "float"
+default = 1.0
+min = 0.0
+max = 9.0
+step = 0.1
+
+[[options]]
+id = "rain_ripples"
+name = "Rain rings"
+description = "The game draws its own rings on wet water. Vanilla keeps those alone; the pack's own adds its rings on top and leaves the vanilla ones where they are."
+type = "choice"
+values = ["Vanilla", "Pack's own"]
+default = "Vanilla"
+
+[[options]]
+id = "ring_strength"
+name = "Rings strength"
+description = "How strong the pack's rain rings are: bright crests and how much they bend the bed. Only with Rain rings set to the pack's own."
+type = "float"
+default = 1.0
+min = 0.0
+max = 3.0
+step = 0.05
+
+[[options]]
+id = "ring_size"
+name = "Rings size"
+description = "The distance between rings: higher spreads them over more blocks."
+type = "float"
+default = 1.0
+min = 0.4
+max = 4.0
+step = 0.05
+
+[[options]]
+id = "ring_lines"
+name = "Rings thickness"
+description = "How wide one ring is: below 1 they are thin hairlines, above they soften into wide ripples."
+type = "float"
+default = 1.0
+min = 0.4
+max = 2.5
+step = 0.05
+
+[[options]]
+id = "ring_speed"
+name = "Rings speed"
+description = "How fast the rings spread and fade. 0 freezes them."
+type = "float"
+default = 1.0
+min = 0.0
+max = 9.0
+step = 0.1
+
+[[options]]
+id = "water_saturation"
+name = "Water saturation"
+description = "How blue the water is: 0 is grey, 1 keeps vanilla's biome tint, 2 is vivid. Swamp water is already green in vanilla."
+type = "float"
+default = 1.0
+min = 0.0
+max = 2.0
+step = 0.05
+
+[[options]]
+id = "water_hue"
+name = "Water hue"
+description = "Turns the water's hue around the grey axis, in degrees: negative goes toward green, positive toward violet."
+type = "float"
+default = 0.0
+min = -180.0
+max = 180.0
+step = 5.0
+
+[[options]]
+id = "glints"
+name = "Sun glitter"
+description = "Sparkles of sunlight on the surface. Off hides them whatever their strength below."
+type = "bool"
+default = true
+
+[[options]]
+id = "water_glints"
+name = "Sun glitter"
+description = "Small sparkles of sunlight on the surface, on top of the broad glint. 0 leaves only the smooth highlight."
+type = "float"
+default = 1.0
+min = 0.0
+max = 4.0
+step = 0.05
+
+[[options]]
+id = "glint_size"
+name = "Glitter size"
+description = "How big one sparkle is: 10 is the pack's own look, higher gives bigger and sparser glitter, lower a fine sand."
+type = "float"
+default = 10.0
+min = 2.0
+max = 40.0
+step = 0.5
+
+[[options]]
+id = "glint_speed"
+name = "Glitter speed"
+description = "How fast the sparkles drift and flicker. 0 freezes them."
+type = "float"
+default = 1.0
+min = 0.0
+max = 9.0
+step = 0.1
+
+[[options]]
+id = "glint_lines"
+name = "Glitter lines"
+description = "Thickness of the bright strands the sparkles are cut from: smaller is finer and sparser."
+type = "float"
+default = 0.08
+min = 0.02
+max = 0.3
+step = 0.01
+
+[[options]]
+id = "glint_blur"
+name = "Glitter blur"
+description = "How hard a strand is pressed into a point: below 0.35 it sharpens into a pinprick, above it spreads into a bloom, and past 1 it keeps spreading."
+type = "float"
+default = 0.8
+min = 0.0
+max = 1.5
+step = 0.05
+
+[[options]]
+id = "caustics"
+name = "Caustics"
+description = "The bright net the sun draws on the bed under moving water. Off hides it whatever its strength below."
+type = "bool"
+default = true
+
+[[options]]
+id = "water_caustics"
+name = "Caustics"
+description = "The bright net the sun draws on the bed under moving water: strongest in the shallows, gone in the deep and at night. 0 turns it off."
+type = "float"
+default = 1.0
+min = 0.0
+max = 4.0
+step = 0.05
+
+[[options]]
+id = "caustic_speed"
+name = "Caustics speed"
+description = "How fast the net on the bed crawls. 0 freezes it."
+type = "float"
+default = 1.0
+min = 0.0
+max = 9.0
+step = 0.1
+
+[[options]]
+id = "caustic_size"
+name = "Caustics size"
+description = "The net's cell size: higher is a bigger, wider mesh, lower is a fine dense one."
+type = "float"
+default = 1.0
+min = 0.25
+max = 4.0
+step = 0.05
+
+[[options]]
+id = "caustic_lines"
+name = "Caustics lines"
+description = "How thick the bright strands are: smaller is a thinner, sharper web."
+type = "float"
+default = 0.2
+min = 0.04
+max = 0.5
+step = 0.02
+
+[[options]]
+id = "water_opacity"
+name = "Water opacity"
+description = "How much of what lies behind the water shows, seen from the surface. 1 keeps vanilla's own alpha, 0 leaves only the reflection."
+type = "float"
+default = 1.0
+min = 0.0
+max = 1.0
+step = 0.05
+
+[[options]]
+id = "underwater_murk"
+name = "Underwater murk"
+description = "How fast water swallows colour with distance while you are under it, red first. 0 keeps vanilla's own tint alone."
+type = "float"
+default = 0.35
+min = 0.0
+max = 1.0
+step = 0.05
+
+[[options]]
 id = "water_clarity"
 name = "Water clarity"
 description = "How far you see into water."
@@ -319,7 +603,7 @@ description = "Radius, in pixels, of a blur on the sun alone, so its pixel rim t
 type = "float"
 default = 14.0
 min = 0.0
-max = 24.0
+max = 48.0
 step = 1.0
 
 [[options]]
@@ -346,7 +630,7 @@ description = "Radius, in pixels, of the blur on vanilla's cloud rims. Higher is
 type = "float"
 default = 5.0
 min = 0.0
-max = 32.0
+max = 64.0
 step = 1.0
 
 [[options]]

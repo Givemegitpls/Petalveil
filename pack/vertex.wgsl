@@ -26,7 +26,7 @@ fn vertex(input: VertexInput) -> vec3<f32> {
         // Only the corners above the block's floor move, so water never opens a gap against what
         // lies under it.
         if water_waves && fract(world.y) > 0.02 {
-            p.y -= (1.0 - wave_field(world.xz, t, storm)) * (0.05 + 0.08 * storm);
+            p.y -= (1.0 - wave_field(world.xz, t * wave_speed, storm)) * (0.02 + 0.03 * storm) * wave_size;
         }
         return p;
     }

@@ -1,11 +1,43 @@
-// Water: vanilla's colour and see-through kept, with waves, the world's mirror at a slant, a sun
-// glint and storm foam. No pass of its own: the mirror is Horizon's half-resolution reflection.
+// Water: vanilla's colour and light as the base, its mirror bent by the swell, and — on the surface —
+// its own refraction, so the bed under the water bends with the wave. That last part is what makes a
+// wave visible within ten blocks of the camera: with the engine's plain alpha blend there is nothing
+// for the normal to move.
 
 override reflections: bool = true;
+override ripples: bool = true;
+override water_ripples: f32 = 1.0;
+override ripple_speed: f32 = 1.0;
+override water_opacity: f32 = 1.0;
+override water_saturation: f32 = 1.0;
 override water_clarity: f32 = 0.5;
+override water_texture: bool = true;
+override glints: bool = true;
+override water_glints: f32 = 1.0;
+override glint_size: f32 = 10.0;
+override glint_lines: f32 = 0.08;
+override glint_blur: f32 = 0.75;
+override glint_speed: f32 = 1.0;
+override caustics: bool = true;
+override water_caustics: f32 = 1.0;
+override caustic_size: f32 = 1.0;
+override caustic_lines: f32 = 0.2;
+override caustic_speed: f32 = 1.0;
+override water_hue: f32 = 0.0;
+// Index into "Vanilla" (0) and "Pack's own" (1).
+override rain_ripples: u32 = 0u;
+override ring_strength: f32 = 1.0;
+override ring_size: f32 = 1.0;
+override ring_lines: f32 = 1.0;
+override ring_speed: f32 = 1.0;
 
-// The distance of the point behind the water, for the water's own depth: not used to change what
-// shows through (Horizon blends that as vanilla does), only to know how deep it is.
+// Rotates a colour around the grey axis, in degrees: the cheap way to shift a hue.
+fn hue_turn(c: vec3<f32>, degrees_amount: f32) -> vec3<f32> {
+    let a = radians(degrees_amount);
+    let axis = vec3<f32>(0.57735, 0.57735, 0.57735);
+    return c * cos(a) + cross(axis, c) * sin(a) + axis * dot(axis, c) * (1.0 - cos(a));
+}
+
+// The distance of the point behind the water: what the bed's depth in the picture is.
 fn depth_distance(screen: vec2<f32>, depth: f32) -> f32 {
     if depth <= 0.0 {
         return 1e4;
@@ -24,70 +56,211 @@ fn sky_reflection(r: vec3<f32>) -> vec3<f32> {
     return c;
 }
 
+// The ridge field both the caustics and the glitter are made of. Two independent noises, drifting in
+// different directions, with different spatial frequencies: their difference is average almost
+// everywhere but cancels along thin lines where the two happen to match. Inverting it turns those
+// lines into a bright net — that is the pattern the sun draws on a bed under moving water.
+// `scale` is the net's cell size, `lines` the strands' thickness, `speed` how fast it drifts.
+fn ridge_net(xz: vec2<f32>, t: f32, scale: f32, lines: f32, speed: f32) -> f32 {
+    let a = value_noise(xz * 1.7 * scale + vec2<f32>(t * 0.25, t * 0.18) * speed);
+    let b = value_noise(xz * 2.3 * scale + vec2<f32>(-t * 0.21, t * 0.16) * speed + vec2<f32>(7.3, 2.9));
+    return 1.0 - smoothstep(lines * 0.15, lines, abs(a - b));
+}
+
+// Caustics on the bed: the net as it is.
+fn caustic_net(xz: vec2<f32>, t: f32, scale: f32, lines: f32) -> f32 {
+    return ridge_net(xz, t, scale, lines, caustic_speed);
+}
+
+// Sun glitter on the surface: the same net, much finer and faster. `lines` sets the strand's
+// thickness and `blur` how hard the strand is pressed into a point: a high exponent keeps only the
+// core (a sharp spark), a low one leaves the strand's body (a soft glow). The exponent spans 12 down
+// to 0.75, and a soft setting also widens the strand, so the slider has real travel at both ends.
+// The soft half of the slider used to be squeezed into its top 15%, where it was the only usable part.
+// Now the sharpening zone is the bottom 35% and everything above is spread: the exponent walks 3.56 down
+// to 0.5 and a coarser copy of the same net fades in, so the whole upper half is a real range.
+const BLUR_SPLIT: f32 = 0.35;
+
+fn sparkle(xz: vec2<f32>, t: f32, scale: f32, lines: f32, blur: f32) -> f32 {
+    let b = clamp(blur, 0.0, 1.5);
+    let over = clamp((b - 1.0) / 0.5, 0.0, 1.0);
+    let w = clamp((b - BLUR_SPLIT) / (1.0 - BLUR_SPLIT), 0.0, 1.0);
+    var exponent = 3.56;
+    if b <= BLUR_SPLIT {
+        exponent = 24.0 + (3.56 - 24.0) * (1.0 - b / BLUR_SPLIT);
+    } else if b <= 1.0 {
+        exponent = 3.56 + (0.5 - 3.56) * w;
+    } else {
+        // Past 1 the pack keeps spreading instead of stopping: the field flattens further and the
+        // coarser copy grows wider still, which is what the player reached for.
+        exponent = 0.5 + (0.2 - 0.5) * over;
+    }
+    var dots = pow(ridge_net(xz, t, scale, lines, 3.0 * glint_speed), exponent);
+    if b > BLUR_SPLIT {
+        let wide_scale = mix(scale * 0.55, scale * 0.30, over);
+        let wide_lines = mix(lines * 1.6, lines * 2.6, over);
+        let wide = pow(ridge_net(xz, t, wide_scale, wide_lines, 3.0 * glint_speed), exponent);
+        dots = mix(dots, wide, w * w);
+    }
+    return dots;
+}
+
 fn water_surface(input: MaterialInput) -> vec4<f32> {
     let world = input.position + frame.camera_position;
     let t = frame.time;
     let storm = storm_amount();
     let to_eye = normalize(-input.position);
-    let top = input.face == 1u;
+    // The surface's own normal says whether this is the top of the water. `input.face` describes the
+    // block's face and is not reliable for a fluid's top quad.
+    let top = abs(input.normal.y) > 0.5;
     let flowing = (input.tags & TAG_WATER_FLOW) != 0u;
 
-    // Vanilla's water: the sprite, the biome tint and vanilla's light. Everything below is a
-    // change of hue or a reflection over it, never a change of how bright the water is.
-    let vanilla = input.albedo.rgb * input.tint.rgb * input.lightmap;
+    // Vanilla's water: the sprite, the biome tint and vanilla's light. With the texture off the sprite is
+    // replaced by a flat pale blue, so the surface is the biome's own colour with no scrolling pixels —
+    // the scrolling is what makes the vanilla texture visible, and it fights the waves.
+    let sprite = select(vec3<f32>(0.78, 0.86, 1.0), input.albedo.rgb, water_texture);
+    let vanilla = sprite * input.tint.rgb * input.lightmap;
+    let light = luma(input.lightmap);
+    // The hue comes from the biome's own tint, so a swamp stays green and a warm sea stays warm.
+    let unit = input.tint.rgb / max(max(input.tint.r, max(input.tint.g, input.tint.b)), 0.001);
 
+    // The fine chop's amount, with its own switch: off, the surface keeps only the swell, the rings and
+    // the texture.
+    let chop_amount = select(0.0, water_ripples, ripples);
+
+    // The wave normal, and the bend it puts on everything that samples the world through it. The bend
+    // is scaled by Wave size on its own: the geometry is centimetres, the visible motion is this.
     var n = input.normal;
+    var bend = vec2<f32>(0.0);
+    // How strong the rain rings are here: they are also shaded, not only warped, or they stay invisible
+    // while the mirror is off.
+    var ring_shade = 0.0;
     if top && water_waves {
-        n = water_normal(world.xz, t, storm);
+        let wt = t * wave_speed;
+        n = water_normal(world.xz, wt, t * ripple_speed, storm, chop_amount, wave_size);
         n = select(n, -n, input.normal.y < 0.0);
+        bend = vec2<f32>(
+            wave_field(world.xz + vec2<f32>(0.5, 0.0), wt, storm) - wave_field(world.xz, wt, storm),
+            wave_field(world.xz + vec2<f32>(0.0, 0.5), wt, storm) - wave_field(world.xz, wt, storm),
+        ) * 0.06 * wave_size;
     }
+    // Rain rings, the pack's own, only when the player asked for them and only while the world is wet.
     if top {
-        let rip = ripple_slope(world.xz, t) * frame.wetness * 0.4;
+        let rt = t * ring_speed;
+        let rings = select(0.0, 0.55 * ring_strength * frame.wetness, rain_ripples == 1u);
+        let rip = ripple_slope(world.xz, rt, ring_size, ring_lines) * rings;
         n = normalize(n + vec3<f32>(-rip.x, 0.0, -rip.y));
-    }
-
-    // How deep the water is here, read from what the world drew before the water: shallow water
-    // keeps more of the bed's colour showing through, deep water keeps its own.
-    var body = vanilla;
-    if top {
-        let size = vec2<f32>(textureDimensions(opaque_depth));
-        let at = vec2<i32>(min(input.screen * size, size - 1.0));
-        let thickness = max(depth_distance(input.screen, textureLoad(opaque_depth, at, 0)) - length(input.position), 0.0);
-        let reach = mix(1.5, 9.0, water_clarity);
-        let absorb = exp(-thickness / reach * vec3<f32>(1.6, 0.8, 0.55));
-        // Deep water darkens a little toward the tint: the bed's colour is what the eye sees first.
-        body = mix(vanilla * 0.8, vanilla, absorb);
+        // The rings' share of the bend is the rings' own: `Ripples` must not touch it, or the chop slider
+        // ends up driving the rain circles.
+        bend += ripple_slope(world.xz * 0.8, rt, ring_size, ring_lines)
+            * select(0.0, 0.035 * ring_strength * frame.wetness, rain_ripples == 1u);
+        // The fine chop gets its own bend, so `Ripples` has something to move near the camera even with the
+        // mirror off: this is the only channel a normal has left when nothing is reflected.
+        let xl = world.xz / max(ripple_length, 0.05);
+        let ct = t * ripple_speed;
+        bend += vec2<f32>(
+            value_noise(xl * 5.0 + vec2<f32>(ct * 0.5, 0.0)) - 0.5,
+            value_noise(xl * 5.0 + vec2<f32>(0.0, -ct * 0.45) + vec2<f32>(3.0, 1.0)) - 0.5,
+        ) * 0.02 * chop_amount;
     }
 
     let cos_v = clamp(dot(n, to_eye), 0.0, 1.0);
     let fresnel = 0.03 + 0.97 * pow(1.0 - cos_v, 5.0);
     var mirror = sky_reflection(reflect(-to_eye, n));
     if reflections && top && frame.has_reflection == 1u {
-        let uv = clamp(input.screen + n.xz * 0.02, vec2<f32>(0.0), vec2<f32>(1.0));
+        let uv = clamp(input.screen + n.xz * 0.045 + bend, vec2<f32>(0.0), vec2<f32>(1.0));
         mirror = textureSampleLevel(reflection, reflection_sampler, uv, 0.0).rgb;
     }
     // Grey storm sky in the mirror, so rain does not turn the water a bright blue.
     mirror = mix(mirror, vec3<f32>(luma(mirror)) * vec3<f32>(0.88, 0.94, 1.0), storm * 0.55);
-    var color = mix(body, mirror, clamp(fresnel, 0.0, 0.85));
 
-    // The sun's glint: one tight highlight on the crests.
+    // The sun's glint, in two lobes: a broad one that lights the surface near the camera, where the
+    // mirror holds only flat sky, and the tight sparkle on the crests.
     let half_way = normalize(frame.light_direction + to_eye);
     let lit = shadow_at(input.position, vec3<f32>(0.0, 1.0, 0.0), frame.light_direction.y);
-    color += direct_color() * pow(max(dot(n, half_way), 0.0), 180.0) * lit * 3.0;
+    let facing = max(dot(n, half_way), 0.0);
+    let glint = direct_color() * lit * (pow(facing, 18.0) * 0.45 + pow(facing, 180.0) * 3.0);
 
-    // Foam on the crests while it blows.
-    if storm > 0.3 && water_waves {
-        let crest = wave_field(world.xz, t, storm);
-        let foam = smoothstep(0.8, 1.0, crest) * smoothstep(0.3, 0.85, storm);
-        color = mix(color, vec3<f32>(0.86, 0.92, 0.96) * (0.35 + 0.65 * luma(input.lightmap)), foam * 0.55);
+    // Sides of a fall and anything that is not the surface: vanilla's own look and alpha, tinted by the
+    // mirror at a slant, with the pale streaks of a falling sheet.
+    if !top {
+        var color = mix(vanilla, mirror, clamp(fresnel, 0.0, 0.5));
+        color = hue_turn(color, water_hue);
+        color = mix(vec3<f32>(luma(color)), color, clamp(water_saturation, 0.0, 2.0));
+        color += glint * 0.5;
+        if flowing {
+            let tang = normalize(vec2<f32>(-input.normal.z, input.normal.x) + vec2<f32>(1e-5, 0.0));
+            let streak = smoothstep(0.55, 0.95, value_noise(vec2<f32>(dot(world.xz, tang) * 2.4, world.y * 0.6 + t * 2.2)));
+            color = mix(color, color * 1.15 + vec3<f32>(0.1, 0.13, 0.15), streak * 0.4);
+        }
+        let alpha = select(0.85, input.albedo.a, water_texture) * input.tint.a * clamp(water_opacity, 0.0, 1.0);
+        return vec4<f32>(shoulder(color), clamp(alpha, 0.0, 1.0));
     }
 
-    // A falling sheet of water: pale streaks running down, as vanilla's flowing texture is.
-    if flowing && !top {
-        let tang = normalize(vec2<f32>(-input.normal.z, input.normal.x) + vec2<f32>(1e-5, 0.0));
-        let streak = smoothstep(0.55, 0.95, value_noise(vec2<f32>(dot(world.xz, tang) * 2.4, world.y * 0.6 + t * 2.2)));
-        color = mix(color, color * 1.15 + vec3<f32>(0.1, 0.13, 0.15), streak * 0.4);
+    // The surface: our own refraction. The bed is read from the picture taken before the translucent
+    // pass, at a coordinate bent by the wave, so the bottom under the water moves with the swell.
+    let size = vec2<f32>(textureDimensions(opaque_color));
+    let bent_uv = clamp(input.screen + bend + n.xz * 0.02, vec2<f32>(0.001), vec2<f32>(0.999));
+    let bent_at = vec2<i32>(min(bent_uv * size, size - 1.0));
+    var behind = textureLoad(opaque_color, bent_at, 0).rgb;
+    let thickness = max(depth_distance(bent_uv, textureLoad(opaque_depth, bent_at, 0)) - length(input.position), 0.0);
+    let reach = mix(2.0, 12.0, water_clarity);
+
+    // The sun draws its net on the bed: bright where the two noises cancel, fading with depth and with
+    // the sun's own reach.
+    if caustics && water_caustics > 0.0 {
+        let net = caustic_net(world.xz, t, 1.0 / max(caustic_size, 0.05), caustic_lines);
+        let fade = exp(-thickness / max(reach * 1.6, 0.5)) * (0.35 + 0.65 * smoothstep(0.0, 0.35, frame.sun_direction.y));
+        behind *= 1.0 + net * water_caustics * fade * 0.9;
+    }
+    // Shallow water is the bed with a turquoise cast; deep water is its own colour, darkening with depth.
+    let deep = 1.0 - exp(-thickness / reach);
+    let shallow = vanilla * 1.06 + unit * vec3<f32>(0.10, 0.30, 0.32) * 0.35 * light;
+    let drowned = vanilla * 0.45 + unit * vec3<f32>(0.02, 0.10, 0.20) * 0.60 * light;
+    var body = mix(shallow, drowned, deep);
+    body = hue_turn(body, water_hue);
+    body = mix(vec3<f32>(luma(body)), body, clamp(water_saturation, 0.0, 2.0));
+
+    // Light is absorbed red first, then green, so a deep bed fades into the water's own colour.
+    let absorb = exp(-thickness / reach * vec3<f32>(1.6, 0.8, 0.55));
+    var color = mix(body, behind, absorb);
+
+    // The crests catch the light and the troughs sit in shade: the swell reads even without reflections.
+    if water_waves {
+        let crest = wave_field(world.xz, t * wave_speed, storm);
+        color *= 1.0 + (crest - 0.5) * (0.10 + 0.10 * storm) * min(wave_size, 4.0);
+    }
+    // The rings themselves: their crests catch the light, their troughs go dark, so the circles read on
+    // the surface even with no reflection at all.
+    if ring_shade > 0.0 {
+        let lit_ring = 0.35 + 0.65 * smoothstep(0.0, 0.35, frame.sun_direction.y);
+        color *= 1.0 + ring_shade * 0.35 * lit_ring;
     }
 
-    return vec4<f32>(shoulder(color), input.albedo.a * input.tint.a);
+    color = mix(color, mirror, clamp(fresnel, 0.0, 0.85));
+    color += glint;
+
+    // Sun glitter: many small highlights instead of the one broad lobe, only where the light is.
+    if glints && water_glints > 0.0 && lit > 0.0 {
+        let crest = wave_field(world.xz, t * wave_speed, storm);
+        // 30 / size puts the default (10) on the scale the pack looked best at, and lets the slider go
+        // both finer (2 -> 15) and much coarser (40 -> 0.75).
+        let dots = sparkle(world.xz, t, 30.0 / max(glint_size, 0.5), glint_lines, glint_blur) * (0.45 + 0.55 * crest);
+        color += direct_color() * dots * water_glints * lit * daylight() * 4.0;
+    }
+
+    // The chop's own shading: two uneven layers of brightness, so the surface moves even when the sun is
+    // behind the camera and nothing is mirrored. This, not the normal, is what the eye reads as ripples.
+    if chop_amount > 0.0 {
+        let xl = world.xz / max(ripple_length, 0.05);
+        let st = t * ripple_speed;
+        let a = value_noise(xl * 2.3 + vec2<f32>(st * 0.35, -st * 0.28)) - 0.5;
+        let b = value_noise(xl * 6.1 - vec2<f32>(st * 0.42, st * 0.31) + vec2<f32>(5.0, 2.0)) - 0.5;
+        color *= 1.0 + (a * 0.10 + b * 0.06) * min(chop_amount, 2.0);
+    }
+
+    // See-through from above: at 1 the water keeps its own colour, at 0 only the bed shows.
+    color = mix(behind, color, clamp(water_opacity, 0.0, 1.0));
+    // The surface draws itself: what lies behind it is already mixed in, so it writes an opaque pixel.
+    return vec4<f32>(shoulder(color), 1.0);
 }

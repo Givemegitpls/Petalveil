@@ -94,3 +94,113 @@
   Iris-format packs do not feel wrong, so the difference is the sky stage, not the engine; suspect any
   camera-locked layer first.
 
+- Water options the user asked for: `water_ripples` (fine chop on the normal only, 0 = glassy, 2 = lively),
+  `water_opacity` (surface transparency, multiplier on vanilla alpha) and `underwater_murk` (depth absorption in
+  the composite while `frame.in_water` is up, red first). Defaults are "vanilla plus a little".
+- Waves were invisible because `top` was taken from `input.face == 1u`, which describes the block's face and
+  not the fluid's top quad. Use `abs(input.normal.y) > 0.5`. The swell then also shades its crests
+  (`0.96 + 0.08 * swell`) so it reads even with reflections off.
+- Water colour controls: `water_saturation` (0..2) and `water_hue` (degrees, via a rotation around the grey
+  axis) applied to the water's own body only, never to the mirror, so reflections keep the sky's colours.
+- Calibration: the first working swell was ten times too big for the user ("раз в десять меньше"), so the
+  constants are a tenth and `wave_size` (0..10, default 1) is the room to grow — do not "fix" the small default.
+- Water like the user wants it (Lumen's look, their reference): the colour must *graduate with depth*
+  (`deep = 1 - exp(-thickness / reach)`, turquoise shallow over the bed, the biome's own colour deep), and the
+  mirror must be bent by the fine chop separately from the swell — with a small swell the reflection otherwise
+  turns into a flat pane. Deep water also gets a little more opaque, which hides the aliased sea floor.
+- The swell's *geometry* is deliberately tiny, so its visibility must come from three places, all scaled
+  by `wave_size`: the mirror's own bend (gradient of `wave_field` over half a block, x0.06), the crest shading
+  (`(crest - 0.5) * 0.1`), and the small vertex drop. Scaling only the geometry makes the water look static —
+  the user said "волны не рабочие" exactly after that.
+- The rain rings (`ripple_slope`) are liked and must stay: baseline 0.15 in the normal, stronger with
+  `frame.wetness`, and their share of the mirror bend scales with wetness too.
+- Rain rings must be randomised per cell (own centre, phase, speed, and only some cells present) or they line
+  up on a visible grid, and they must be gated by `frame.wetness` alone: a dry lake with rings is wrong.
+- "Waves visible only far away" is physics: near the camera the view angle is steep, fresnel is ~0.02, so the
+  mirror shows flat sky and the swell cannot read in it. The near field needs its own cues: a broad specular
+  lobe (`pow(dot(n, halfway), 18)`) and a slow fine shimmer, both gated by daylight and shadows.
+- The game draws its own rain rings on wet water, so the pack's rings are an option now: `Rain rings`
+  = Vanilla (default, ours off) or Pack's own (ours on top; the vanilla ones cannot be removed from a pack).
+- Two real bugs the user caught: (1) the reflection bend had a `0.6 + 0.8 * wetness` factor, so the pack's
+  rain rings lived in clear weather — a rain effect must be gated by `wetness` alone, with no baseline;
+  (2) waves were invisible within ten blocks because the near field is mostly the bed seen *through* the water,
+  and the engine's alpha blend gives the normal nothing to move. Fixed by doing the refraction ourselves:
+  sample `opaque_color` at `screen + bend + n.xz`, absorb by thickness, then return an opaque surface
+  (alpha 1). Side faces and waterfalls keep vanilla's alpha.
+- `Pack's own` rain rings cannot replace vanilla's: the game draws those itself. The option only adds ours.
+- Cheap water detail the user asked for, both procedural (no textures): `sparkle()` = product of two moving
+  noises, thresholded by smoothstep — rare bright spots that read as sun glitter; `caustic_net()` = |a - b| of two
+  drifting noises, bright where they cancel — the net the sun draws on a bed, applied by multiplying the refracted
+  `behind` colour, faded by thickness and by the sun's elevation. Options `water_glints`, `water_caustics` (0..2).
+- The Water page is grouped into sub-pages now: Surface / Colour / Light, reached from `page:water` (the main
+  page lists `page:water`, and that page lists the three). Every page must be reachable from the first or the
+  check refuses the pack.
+- Detail knobs the user asked for: `glint_scale` (glitter frequency), `caustic_size` (bigger = wider cells; scale = 1/size) and
+  `caustic_lines` (strand thickness), on top of `water_glints` / `water_caustics` (strength, 0 = off).
+- One noise for both water details: `ridge_net(xz, t, scale, lines, speed)` — two drifting `value_noise`s at
+  1.7x and 2.3x frequency, `1 - smoothstep(lines*0.15, lines, |a-b|)` gives the bright net. Caustics call it as
+  is (speed 1); glitter calls it at a fine scale, three times faster, and cubes the result so strands break into
+  points. Do not duplicate the noise code when a new effect needs "sparkly": reuse `ridge_net`.
+- Glitter knobs (Water > Light): `glint_size` (bigger = bigger sparkles; scale = 30/size, so 10 reproduces the reference look), `glint_lines` (strand thickness fed to
+  `ridge_net`), `glint_blur` (exponent between 12 and 0.75 *and* widens the strand as it softens, so the slider has real travel
+  at both ends — the narrow 6..2 mapping was rejected as "маленький диапазон"), `water_glints` (strength). Caustics have the same trio: `caustic_size`, `caustic_lines`, `water_caustics`.
+- `water_texture` (bool, default on): off replaces the vanilla scrolling water sprite with a flat pale blue, so
+  the surface is the biome tint plus our waves/reflections only. The scrolling sprite fights the waves; this is
+  the switch the user asked for. Side faces keep a constant alpha (0.85) when it is off, since the sprite's alpha
+  is gone.
+- Slider semantics: the user reads "size" as "how big is the shape", so a bigger value must make bigger
+  sparkles/cells. Both water detail sizes are now inverted at the call site (`70 / glint_size`, `1 / caustic_size`)
+  with defaults chosen to keep the shipped look. Do not expose a raw frequency again.
+- Twice for the same lesson: changing a slider's *mapping* and its *shape* in the same session makes the
+  reference look unreachable. The user's "3 was good" is now exactly `glint_size` 10 (`30 / 10`), and blur must
+  not widen the strand — it only shapes the exponent (12..0.75). When re-tuning a knob, first reproduce the old
+  value exactly, then extend the ends.
+- Slider travel rule (learned twice): keep the shipped default on the same visual as before, and extend only the
+  ends. `glint_blur` now maps 24 -> 3.56 (at 0.75) -> 0.5 exponent, and past 0.75 it also fades in a coarser
+  version of the same net, so the top end is a real spread and not the same point, paler.
+- Blur radii were widened on request: clouds 0..64 px (24 spiral taps instead of 16, or a wide radius opens gaps
+  between samples), sun 0..48 px (16 taps). Defaults unchanged: 5 and 14.
+- Snapshot of the user's accepted look (2026-11-14, `shaderpacks/.horizon-options/petalveil.txt`): reflections
+  off, wave_size 0.5, water_ripples 0, water_saturation 0.45, water_glints 0.35, glint_blur 0.95, water_caustics
+  0.8, water_opacity 0.7, underwater_murk 0.2, water_clarity 0.25, sun_scale 0.35, volumetric fog on, fog_height
+  42. Shadow depth, cloud blur and sun blur sit at the pack defaults (1.6 / 5 / 14). Do not change these defaults
+  without a reason.
+- The options file still holds stale `glint_scale` / `caustic_scale` keys from before the rename; the live options
+  are `glint_size` / `caustic_size` and they are at their defaults. Renaming an option id silently resets the
+  player's value — prefer keeping ids when only the mapping changes.
+- Headroom rule: the user tunes with values ~50% of what they want and hits the top of sliders, so the maxima
+  matter more than the defaults. `water_glints` and `water_caustics` now run 0..4, `glint_blur` 0..1.5 (past 1 the
+  wide copy keeps growing: scale*0.55 -> 0.30, lines*1.6 -> 2.6, exponent 0.5 -> 0.2). Keep their tuned values
+  meaningful: do not rescale a slider they already use.
+- `wave_size` step is 0.05 (was 0.5): the user wanted values between 0 and 0.5 and had nowhere to click. A coarse
+  step below 1 is the same class of bug as a narrow range — check the step, not only the bounds.
+- `wave_size` is capped at 1: above that it stopped making sense (the user). Animation speeds are separate
+  sliders now: `wave_speed` (swell time, shared and used in vertex too), `glint_speed` (multiplies `sparkle`'s
+  ridge drift, 3.0 -> 3.0*speed) and `caustic_speed` (multiplies `caustic_net`'s drift).
+- Ripple amplitudes were left 5x too small when the swell was cut tenfold: the `Ripples` slider was fine, its
+  base was not. `micro` is 0.060 (+0.050 storm), `fine` is 0.035, both multiplied by `water_ripples`, and the fine
+  shimmer now scales with `water_ripples` too — not with `wave_size`, which made the two knobs feel coupled.
+- All three animation speeds run 0..9 with a 0.1 step: the user reached the top of 0..3 on waves in a minute.
+- "Wave size" meant *wavelength* to the user, not amplitude. Split: `wave_size` is now labelled Wave height (id
+  kept, so their 0.5 survives) and `wave_length` (0.25..4, default 1) stretches the whole pattern inside
+  `wave_field` (`xz / wave_length`), so height and speed keep their meaning.
+- Coupling bug: the rain rings' refraction bend carried `water_ripples`, so the Ripples slider visibly drove
+  the rain circles. Each effect owns its term: rings use `wetness` only, the fine chop gets its own small bend
+  (two noises, x0.004) so `Ripples` still moves the near field.
+- With reflections off a water normal has almost no visible channel: the ripples must show through the
+  refraction bend (now 0.02 * ripples on two noises) and through brightness layers (0.10 + 0.06), not through
+  fresnel. Check the player's `reflections` value before tuning a normal-driven effect.
+- Rain rings the user actually wants (`Rain rings = Pack's own`, in rain): they are gated by `wetness` alone,
+  and they need a *shading* channel as well as a normal — `ring_shade = length(rip)` brightens their crests
+  (`* 1 + 0.35 * lit_ring`), and their refraction bend is now 0.035 * wetness. With the mirror off, a ring that
+  only tilts the normal is invisible.
+- Ring settings exist now (Water > Surface, after the `Rain rings` choice): `ring_strength` (0..3, bright crests
+  and bed bend), `ring_size` (0.4..4, spacing), `ring_lines` (0.4..2.5, how wide one ring is) and `ring_speed`
+  (0..9). `ripple_slope` takes `(p, t, cell_size, thickness)` and both its callers pass them.
+- The user could not find settings that did not exist: when a feature is "not visible", check whether it has any
+  knobs at all, not only whether they are on the right page.
+- Every water detail has a checkbox now, as asked: `glints`, `caustics`, `ripples` (bools) gate their sliders;
+  `rain_ripples` is a Vanilla/Pack choice. A slider alone is not a switch as far as the user is concerned.
+- `water_normal` takes two clocks now (`t` for the swell, `tr` for the chop) plus `ripple_speed`, so the chop's
+  animation is independent. Watch out for WGSL scope: the rings block already declares `rt`, a second `rt` in the
+  same `if top { ... }` is a redefinition error.

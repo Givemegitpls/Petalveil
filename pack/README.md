@@ -34,7 +34,7 @@ The Nether and the End are left exactly as vanilla draws them.
 - **Lighting**: shadows off/on and their detail, distance, edge softness and depth (`Shadow depth` 0–3, 1 is the
   default, higher is a deeper shade); `Sunlight` 0–2 (0 keeps vanilla's brightness); `Coloured light` shifts the
   hue of torches, soul fire and the like without brightening them.
-- **Water**: reflections, waves, how far you see into water.
+- **Water**: reflections, waves, the vanilla texture on or off, the swell's size, the fine ripples on the normal, rain rings (vanilla's or the pack's own), sun glitter, caustics on the bed, the water's saturation and hue, how see-through the surface is, how fast a dive swallows colour, and how far you see into water.
 - **Nature**: waving plants and the wind's strength.
 - **Sky**: pastel amount, the sun's cell count and size, the sun's blur, cloud edge blur radius, the rainbow, the night mood.
 - **Fog**: volumetric fog off/on, its thickness and height, and the march's step count (8 is the cheap one).
