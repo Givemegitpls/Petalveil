@@ -3,10 +3,10 @@
 
 override volumetric_fog: bool = false;
 override cloud_edges: f32 = 8.0;
-override sun_blur: f32 = 0.0;
-override sun_scale: f32 = 0.25;
 override bloom: f32 = 0.35;
 override sun_rays: f32 = 0.35;
+override moon_rays: bool = true;
+override moon_rays_strength: f32 = 0.5;
 override night_mood: f32 = 0.35;
 override exposure: f32 = 1.0;
 override contrast: f32 = 1.03;
@@ -90,42 +90,6 @@ fn cloud_soft(uv: vec2<f32>, radius: f32, seed: f32) -> vec3<f32> {
     return mix(picture(uv), blurred, max(rim, body));
 }
 
-// The sun's size is `sky.wgsl`'s: vanilla's quad tangent scaled, so the mask matches what is drawn.
-fn sun_cos_radius() -> f32 {
-    let tangent = 0.3 * max(sun_scale, 0.05);
-    return inverseSqrt(1.0 + tangent * tangent);
-}
-
-// 1 on the pack's sun and a little around it, 0 everywhere else. Only sky pixels count: a cloud in
-// front of the sun keeps its own edge.
-fn sun_mask(uv: vec2<f32>) -> f32 {
-    if depth_at(uv) > 0.0 {
-        return 0.0;
-    }
-    let dir = normalize(view_position(uv, 0.0005));
-    let aligned = dot(dir, frame.sun_direction);
-    let edge = sun_cos_radius();
-    // A hair outside the disc is included, so the blur can feather outward.
-    return smoothstep(edge - 0.0025, edge + 0.0008, aligned);
-}
-
-// The sun's own blur, the same spiral as the clouds': a disc of taps that softens the pixel rim into
-// a glow. Cheap: it only runs on the sun's own pixels.
-fn sun_soft(uv: vec2<f32>, radius: f32, seed: f32) -> vec3<f32> {
-    let px = 1.0 / frame.resolution;
-    var sum = vec3<f32>(0.0);
-    var wsum = 0.0;
-    for (var i = 0; i < 16; i++) {
-        let angle = f32(i) * 2.39996323 + seed * 6.2831853;
-        let r = sqrt((f32(i) + 0.5) / 16.0) * radius;
-        let suv = clamp(uv + vec2<f32>(cos(angle), sin(angle)) * r * px, vec2<f32>(0.0), vec2<f32>(1.0));
-        let w = 1.0 / (1.0 + r * 0.05);
-        sum += picture(suv) * w;
-        wsum += w;
-    }
-    return sum / max(wsum, 0.001);
-}
-
 fn post(input: PostInput) -> vec4<f32> {
     // Clouds and a couple of pixels of sky beside them; the land is never touched.
     var c = input.color.rgb;
@@ -147,23 +111,6 @@ fn post(input: PostInput) -> vec4<f32> {
             c = cloud_soft(input.uv, cloud_edges, ign(floor(input.pixel / vec2<f32>(4.0)) * 4.0));
         }
     }
-    // The sun's own softening, separate from the clouds' and off by default.
-    if sun_blur > 0.0 {
-        let mask = sun_mask(input.uv);
-        if mask > 0.0 {
-            c = mix(c, sun_soft(input.uv, sun_blur, ign(floor(input.pixel / vec2<f32>(4.0)) * 4.0)), mask);
-        }
-    }
-
-    // Underwater the water eats colour with distance, red first: that is what makes a dive read as a
-    // dive instead of a blue filter. `frame.in_water` is eased, so the surface crossing does not pop.
-    if underwater_murk > 0.0 && frame.in_water > 0.0 {
-        let d = depth_at(input.uv);
-        let far = select(48.0, length(view_position(input.uv, d)), d > 0.0);
-        let absorb = exp(-far * (0.01 + 0.09 * underwater_murk) * vec3<f32>(1.6, 0.75, 0.55) * frame.in_water);
-        c *= absorb;
-    }
-
     let day = daylight();
     let night = nightfall();
 
@@ -190,7 +137,13 @@ fn post(input: PostInput) -> vec4<f32> {
         ray += textureSampleLevel(petal_rays, linear_sampler, at - r, 0.0).r * 0.0625;
         ray += textureSampleLevel(petal_rays, linear_sampler, at + vec2<f32>(r.x, -r.y), 0.0).r * 0.0625;
         ray += textureSampleLevel(petal_rays, linear_sampler, at + vec2<f32>(-r.x, r.y), 0.0).r * 0.0625;
-        c += vec3<f32>(1.0, 0.86, 0.7) * ray * sun_rays * (0.35 + 0.65 * sun_low()) * day;
+        // The rays belong to whichever body casts the shadows: warm for the sun, pale blue for the moon,
+        // and each time of day has its own strength and its own switch.
+        let tint = mix(vec3<f32>(1.0, 0.86, 0.7), vec3<f32>(0.62, 0.74, 1.0), nightfall());
+        let shape = (0.35 + 0.65 * light_low()) * light_up();
+        let by_day = sun_rays * day * shape;
+        let by_night = select(0.0, moon_rays_strength, moon_rays) * nightfall() * shape;
+        c += tint * ray * max(by_day, by_night);
     }
 
     c *= exposure;

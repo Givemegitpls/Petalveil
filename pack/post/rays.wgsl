@@ -6,7 +6,7 @@ override sun_rays: f32 = 0.5;
 
 // Where the sun is: xy its UV (may be far outside 0..1), z 1 when it is in front of the camera.
 fn sun_screen() -> vec3<f32> {
-    let view = frame.view * vec4<f32>(frame.sun_direction, 0.0);
+    let view = frame.view * vec4<f32>(frame.light_direction, 0.0);
     let clip = frame.projection * view;
     if clip.w <= 0.0001 {
         return vec3<f32>(0.5, 0.5, 0.0);

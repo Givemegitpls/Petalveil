@@ -57,6 +57,16 @@ fn nightfall() -> f32 {
     return select(0.0, 1.0 - smoothstep(-0.16, 0.02, frame.sun_direction.y), overworld());
 }
 
+// 1 while the body that casts the shadows (the sun by day, the moon by night) is above the horizon.
+fn light_up() -> f32 {
+    return smoothstep(0.0, 0.06, frame.light_direction.y);
+}
+
+// 1 with that body on the horizon, 0 from a third of the way up.
+fn light_low() -> f32 {
+    return 1.0 - smoothstep(0.0, 0.32, abs(frame.light_direction.y));
+}
+
 // 1 with the sun on the horizon, 0 from a third of the way up.
 fn sun_low() -> f32 {
     return 1.0 - smoothstep(0.0, 0.32, abs(frame.sun_direction.y));

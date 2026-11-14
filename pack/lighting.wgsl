@@ -4,6 +4,8 @@
 override shadows: bool = true;
 override shadow_softness: u32 = 1u;
 override shadow_strength: f32 = 1.0;
+override moon_shadows: bool = true;
+override moon_shadow_strength: f32 = 0.6;
 override colored_light: f32 = 0.0;
 
 // 1 where the light reaches the point, 0 in shadow. Outside the map's square, and where there is
@@ -96,10 +98,14 @@ fn lit_terrain(input: MaterialInput) -> vec4<f32> {
         let offset_dir = select(n, l, plant);
         let slant = select(facing, 1.0, plant);
         let shadow = shadow_at(input.position, offset_dir, slant);
-        // A shadow takes back a share of vanilla's sky light, and never more than `SHADE` times
-        // the player's Shadow depth.
-        let depth = SHADE * clamp(shadow_strength, 0.0, 3.0);
-        color *= 1.0 - depth * day * open * (1.0 - shadow);
+        // A shadow takes back a share of vanilla's sky light. Day and night have their own weight and
+        // their own switch: at night a full-weight shade would read as a hole in an already dark world,
+        // and some players want no moon shadows at all.
+        let depth_day = SHADE * clamp(shadow_strength, 0.0, 3.0) * day;
+        let depth_night = SHADE * clamp(moon_shadow_strength, 0.0, 3.0) * nightfall()
+            * select(0.0, 1.0, moon_shadows);
+        let depth = max(depth_day, depth_night);
+        color *= 1.0 - depth * open * (1.0 - shadow);
         color += albedo * tint * direct_color() * nl * shadow * open;
         // Leaves and blades glow a little with the sun behind them: the fairy-tale part of daylight.
         if leaf || plant {

@@ -1,7 +1,7 @@
 schema = 1
 id = "petalveil"
 name = "Petalveil"
-version = "0.69.0"
+version = "1.11.0"
 api = "0.1"
 description = "Vanilla's own light kept as the base: sun shadows only touch the light from the sky, so caves, torchlight and night stay vanilla-bright. On top of that a pastel sky, rounded cubic clouds, waves and reflections on water, plants in the wind, and a soft glow."
 authors = ["BarmaleyVIP"]
@@ -11,9 +11,8 @@ shared = ["common.wgsl"]
 [sky]
 file = "sky.wgsl"
 name = "Sky"
-# Vanilla's clouds stay: they are geometry in the world, so they hide the sun and move against the
-# ground when you walk. The sun is the pack's own, drawn as a pixel circle on the screen's grid.
-sun = false
+# Vanilla's sun and clouds both stay: they are geometry in the world, so they hide each other and move
+# against the ground when you walk.
 
 
 [material]
@@ -146,7 +145,7 @@ items = ["page:lighting", "page:water", "page:nature", "page:sky", "page:fog", "
 id = "lighting"
 name = "Lighting"
 description = "Shadows and how much the sun adds to vanilla's own light."
-items = ["shadows", "shadow_softness", "shadow_resolution", "shadow_distance", "shadow_strength", "sun_strength", "colored_light", ""]
+items = ["shadows", "shadow_softness", "shadow_resolution", "shadow_distance", "shadow_strength", "moon_shadows", "moon_shadow_strength", "sun_strength", "colored_light", ""]
 
 [[pages]]
 id = "water"
@@ -181,8 +180,8 @@ items = ["waving", "wave_strength", ""]
 [[pages]]
 id = "sky"
 name = "Sky"
-description = "The sky's pastel tint, the sun's size, the rainbow after rain and the night."
-items = ["sky_pastel", "sun", "sun_pixels", "sun_scale", "sun_blur", "cloud_edges", "rainbow", "night_mood", ""]
+description = "The sky's pastel tint, the clouds' edges, the rainbow after rain and the night."
+items = ["sky_pastel", "cloud_edges", "rainbow", "night_mood", ""]
 
 [[pages]]
 id = "fog"
@@ -194,7 +193,7 @@ items = ["volumetric_fog", "fog_density", "fog_height", "fog_steps", ""]
 id = "camera"
 name = "Camera"
 description = "Edge smoothing, glow, sun rays and the colour grade."
-items = ["bloom", "sun_rays", "exposure", "contrast", "saturation", "vignette", "dither"]
+items = ["bloom", "sun_rays", "moon_rays", "moon_rays_strength", "exposure", "contrast", "saturation", "vignette", "dither"]
 
 [[options]]
 id = "shadows"
@@ -248,6 +247,23 @@ max = 2.0
 step = 0.05
 
 [[options]]
+id = "moon_shadows"
+name = "Moon shadows"
+description = "Shadows cast by the moon at night. Off keeps the night flat, as vanilla has it."
+type = "bool"
+default = true
+
+[[options]]
+id = "moon_shadow_strength"
+name = "Moon shadow depth"
+description = "How dark a moon shadow is. The sun's own depth is Shadow depth; this one applies at night."
+type = "float"
+default = 0.6
+min = 0.0
+max = 3.0
+step = 0.05
+
+[[options]]
 id = "colored_light"
 name = "Coloured light"
 description = "A hue shift on block light: torches warmer, soul fire blue. Brightness stays vanilla's."
@@ -268,14 +284,14 @@ default = true
 id = "water_waves"
 name = "Waves"
 type = "bool"
-default = true
+default = false
 
 [[options]]
 id = "wave_size"
 name = "Wave height"
 description = "The swell's height and its tilt, from 0 (flat) to 1 (a visible chop). The length is a separate slider; the fine detail is Ripples."
 type = "float"
-default = 1.0
+default = 0.4
 min = 0.0
 max = 1.0
 step = 0.01
@@ -285,14 +301,14 @@ id = "water_texture"
 name = "Water texture"
 description = "Vanilla's scrolling water sprite. Off, the surface is the biome's flat colour, and the pack's waves and reflections are the only detail on it."
 type = "bool"
-default = true
+default = false
 
 [[options]]
 id = "wave_length"
 name = "Wave length"
 description = "How long the swell is: 0.25 is a short chop, 1 is the pack's own, 4 stretches one wave over several blocks."
 type = "float"
-default = 1.0
+default = 1.4
 min = 0.25
 max = 4.0
 step = 0.05
@@ -302,7 +318,7 @@ id = "wave_speed"
 name = "Wave speed"
 description = "How fast the swell travels and rolls. 0 freezes the surface."
 type = "float"
-default = 1.0
+default = 3.0
 min = 0.0
 max = 9.0
 step = 0.1
@@ -319,7 +335,7 @@ id = "water_ripples"
 name = "Ripple height"
 description = "The fine chop's strength on the surface and in the refraction: 0 is glassy, 2 is lively. Its wavelength is the next slider."
 type = "float"
-default = 1.0
+default = 0.8
 min = 0.0
 max = 2.0
 step = 0.05
@@ -329,7 +345,7 @@ id = "ripple_length"
 name = "Ripple length"
 description = "The fine chop's wavelength: 0.25 is a tight shimmer, 1 is the pack's own, 4 stretches it into wide soft ripples."
 type = "float"
-default = 1.0
+default = 1.2
 min = 0.25
 max = 4.0
 step = 0.05
@@ -339,7 +355,7 @@ id = "ripple_speed"
 name = "Ripple speed"
 description = "How fast the fine chop drifts. 0 freezes it, independent of the swell's speed."
 type = "float"
-default = 1.0
+default = 4.0
 min = 0.0
 max = 9.0
 step = 0.1
@@ -349,14 +365,14 @@ id = "rain_ripples"
 name = "Rain rings"
 description = "The pack's own rings on wet water. The game draws its own as rain particles: to drop those, set Options > Video Settings > Particles to Minimal (the rain sound stays)."
 type = "bool"
-default = true
+default = false
 
 [[options]]
 id = "ring_strength"
 name = "Rings strength"
 description = "How strong the pack's rain rings are: bright crests and how much they bend the bed. Only with Rain rings set to the pack's own."
 type = "float"
-default = 1.0
+default = 1.4
 min = 0.0
 max = 3.0
 step = 0.05
@@ -386,7 +402,7 @@ id = "ring_speed"
 name = "Rings speed"
 description = "How fast the rings spread and fade. 0 freezes them."
 type = "float"
-default = 1.0
+default = 2.4
 min = 0.0
 max = 9.0
 step = 0.1
@@ -396,7 +412,7 @@ id = "water_saturation"
 name = "Water saturation"
 description = "How blue the water is: 0 is grey, 1 keeps vanilla's biome tint, 2 is vivid. Swamp water is already green in vanilla."
 type = "float"
-default = 1.0
+default = 0.45
 min = 0.0
 max = 2.0
 step = 0.05
@@ -423,7 +439,7 @@ id = "water_glints"
 name = "Sun glitter"
 description = "Small sparkles of sunlight on the surface, on top of the broad glint. 0 leaves only the smooth highlight."
 type = "float"
-default = 1.0
+default = 0.1
 min = 0.0
 max = 4.0
 step = 0.05
@@ -433,7 +449,7 @@ id = "glint_size"
 name = "Glitter size"
 description = "How big one sparkle is: 10 is the pack's own look, higher gives bigger and sparser glitter, lower a fine sand."
 type = "float"
-default = 10.0
+default = 9.5
 min = 2.0
 max = 40.0
 step = 0.5
@@ -453,7 +469,7 @@ id = "glint_lines"
 name = "Glitter lines"
 description = "The core the spark is cut from: smaller is finer and sparser, and it sets where the fade starts."
 type = "float"
-default = 0.06
+default = 0.1
 min = 0.02
 max = 0.3
 step = 0.01
@@ -463,7 +479,7 @@ id = "glint_blur"
 name = "Glitter blur"
 description = "How wide the fade from a bright spark to the dark water is: 0 is a crisp pinprick, 3 melts the sparks into a soft glow. The same meaning as Caustics blur."
 type = "float"
-default = 0.6
+default = 2.7
 min = 0.0
 max = 3.0
 step = 0.05
@@ -480,7 +496,7 @@ id = "water_caustics"
 name = "Caustics"
 description = "The bright net the sun draws on the bed under moving water: strongest in the shallows, gone in the deep and at night. 0 turns it off."
 type = "float"
-default = 1.0
+default = 0.65
 min = 0.0
 max = 4.0
 step = 0.05
@@ -490,7 +506,7 @@ id = "caustic_speed"
 name = "Caustics speed"
 description = "How fast the net on the bed crawls. 0 freezes it."
 type = "float"
-default = 1.0
+default = 2.0
 min = 0.0
 max = 9.0
 step = 0.1
@@ -500,7 +516,7 @@ id = "caustic_fade"
 name = "Caustics depth fade"
 description = "How fast caustics die with depth: 0 keeps them to any depth, 1 is the pack's own, 3 confines them to the shallows."
 type = "float"
-default = 1.0
+default = 0.95
 min = 0.0
 max = 3.0
 step = 0.05
@@ -510,7 +526,7 @@ id = "caustic_blur"
 name = "Caustics blur"
 description = "How wide the fade from a bright strand to the dark bed is: 0 is a crisp web, 3 melts it into a soft glow. Costs nothing extra."
 type = "float"
-default = 0.0
+default = 0.5
 min = 0.0
 max = 3.0
 step = 0.05
@@ -540,7 +556,7 @@ id = "water_opacity"
 name = "Water opacity"
 description = "How much of what lies behind the water shows, seen from the surface. 1 keeps vanilla's own alpha, 0 leaves only the reflection."
 type = "float"
-default = 1.0
+default = 0.75
 min = 0.0
 max = 1.0
 step = 0.05
@@ -550,7 +566,7 @@ id = "underwater_murk"
 name = "Underwater murk"
 description = "How fast water swallows colour with distance while you are under it, red first. 0 keeps vanilla's own tint alone."
 type = "float"
-default = 0.35
+default = 0.2
 min = 0.0
 max = 1.0
 step = 0.05
@@ -560,7 +576,7 @@ id = "water_clarity"
 name = "Water clarity"
 description = "How far you see into water."
 type = "float"
-default = 0.5
+default = 0.25
 min = 0.0
 max = 1.0
 step = 0.05
@@ -589,41 +605,6 @@ default = 0.7
 min = 0.0
 max = 1.0
 step = 0.05
-
-[[options]]
-id = "sun"
-name = "Sun"
-description = "The pack's own sun. Vanilla's is replaced by it, so off leaves the sky without a disc; the sunlight on the world stays."
-type = "bool"
-default = true
-
-[[options]]
-id = "sun_pixels"
-name = "Sun pixels"
-description = "How many cells across the sun's circle: fewer means chunkier pixels. Its size on screen stays vanilla's."
-type = "choice"
-values = ["8", "16", "24", "32", "48"]
-default = "16"
-
-[[options]]
-id = "sun_scale"
-name = "Sun size"
-description = "The sun's size against vanilla's quad: 0.25 (the default) is about 8 degrees across and reads like vanilla's own, 1 is the quad's full 33 degrees."
-type = "float"
-default = 0.25
-min = 0.1
-max = 1.2
-step = 0.05
-
-[[options]]
-id = "sun_blur"
-name = "Sun blur"
-description = "Radius, in pixels, of a blur on the sun alone, so its pixel rim turns into a glow. 14 is the pack's default; 0 keeps the hard edge."
-type = "float"
-default = 14.0
-min = 0.0
-max = 48.0
-step = 1.0
 
 [[options]]
 id = "rainbow"
@@ -657,7 +638,7 @@ id = "volumetric_fog"
 name = "Volumetric fog"
 description = "Fog lit by the sun through the shadows: shafts of light in a forest or a valley. Off by default; it is the costliest option in the pack."
 type = "bool"
-default = false
+default = true
 
 [[options]]
 id = "fog_density"
@@ -674,7 +655,7 @@ id = "fog_height"
 name = "Fog height"
 description = "How tall the ground layer is before the fog thins out, in blocks."
 type = "float"
-default = 24.0
+default = 42.0
 min = 4.0
 max = 64.0
 step = 2.0
@@ -699,12 +680,29 @@ step = 0.05
 
 [[options]]
 id = "sun_rays"
-name = "Sun rays"
-description = "Light spilling from the sun at sunrise and sunset."
+name = "Rays"
+description = "Light spilling from the sun at sunrise and sunset, and from the moon at night."
 type = "float"
 default = 0.5
 min = 0.0
 max = 1.0
+step = 0.05
+
+[[options]]
+id = "moon_rays"
+name = "Moon rays"
+description = "Rays around the moon at night, the same pass as the sun's, tinted pale blue."
+type = "bool"
+default = true
+
+[[options]]
+id = "moon_rays_strength"
+name = "Moon rays strength"
+description = "How strong the moon's rays are. The sun's own is Rays strength."
+type = "float"
+default = 0.5
+min = 0.0
+max = 1.5
 step = 0.05
 
 [[options]]

@@ -247,3 +247,35 @@
 - Both blurs run 0..3 now (the internal ramp clamp too): past `hi = 1` the smoothstep never saturates, so the net
   becomes a broad haze — that is the "as smooth as possible" end. Their saved values (0.95 / 0.6) keep meaning
   what they meant at 1.0/1.5.
+- 1.0.0: the user's tuned values are the shipped defaults now (read from `shaderpacks/.horizon-options/petalveil.txt`
+  before baking): waves off, wave_size 0.4, no vanilla water texture, wave_length 1.4, wave_speed 3, ripples 0.8 /
+  length 1.2 / speed 4, rain rings off, ring_strength 1.4 / speed 2.4, saturation 0.45, glints 0.1 at size 9.5,
+  lines 0.1, blur 2.7, caustics 0.65 at speed 2, fade 0.95, blur 0.5, water_opacity 0.75, underwater_murk 0.2,
+  clarity 0.25, sun 0.35, volumetric fog on, fog height 42.
+- Their options file still holds the same numbers, so nothing changes for them until they press Reset; the game
+  rewrites that file without entries that equal the defaults, so it will shrink on the next change.
+- Sun blur did nothing although its mask logic looked right: the ray direction came from
+  `view_position(uv, 0.0005)`, and at the far plane the perspective divide is numerically garbage, so the mask
+  never matched. Use any mid depth (`0.5`) — the direction is the same and the maths is stable. Celestial bodies
+  do not write depth (`depth_write_enabled: false`), so the sky-depth test itself was fine.
+- The sun is no longer blurred in the composite: `sky.wgsl` draws it with a soft rim, converting `sun_blur`
+  pixels into the disc's own units through the projection (`1/projection[1][1]` gives tan(fov/2), so one pixel is
+  `2*tan_half/resolution.y`). Fewer samples, no scene_color taps, and it cannot miss the mask.
+- `Sun blur` is a blur of the *grid*, not of the disc's rim (the user's own description: an 8x8-cell sun plus a
+  margin, blurred before being scaled up). Implemented as a 5-tap cross of `sun_cell()` with the tap distance in
+  cells — `sun_blur` pixels / cell_pixels, where cell_pixels = disc diameter in pixels / grid. At 0 all taps
+  coincide and the block edges are crisp.
+- Sun: nine taps of a *hard* cell grid give nine grey levels, so a wide blur still showed steps (user: canvas
+  512, blur 43, squares visible). Added a dissolve: once `blur / cell > ~1.5` the result cross-fades to the exact
+  blurred-disc profile `1 - smoothstep(r-blur, r+blur, r)`. Below that the pixel grid stays; above it the sun is a
+  smooth disc by construction.
+- Sun blur: taps are an option now (`sun_samples`: 8/16/32/64, default 32). Below ~16 the spiral leaves visible
+  banding, so keep 32 unless the GPU cost shows up; the dissolve to a smooth disc only starts past ratio 3.
+- 1.9.0: stock sun is back (`[sky] sun` removed from the manifest, all seven sun options gone). The pixel sun
+  code is kept verbatim in `assets/pixel-sun.removed.wgsl`; restoring it means `sun = false` plus a
+  `c += sun_disc(d);` in `sky()`. Reason it went: with a fixed canvas the sprite jumped between canvas pixels as
+  the sun moved, and the user preferred the engine's own body.
+- Day and night have separate controls now: `moon_shadows` + `moon_shadow_strength` (Lighting) and
+  `moon_rays` + `moon_rays_strength` (Camera). Shadows take `max(day_weight, night_weight)`; rays take
+  `max(sun_rays*day, moon_strength*night)` — that keeps the two from adding up at dusk.
+- `rays.wgsl` projects `frame.light_direction`, not `sun_direction`: that is the moon after sunset.
