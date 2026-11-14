@@ -5,6 +5,8 @@ keeps vanilla's own light as its base, so caves, cellars, torchlight and the nig
 colours vanilla gives them, and adds a pastel sky, its own clouds, waves and reflections on water, plants in the
 wind and a soft glow on top.
 
+Screenshots: [repository README](../README.md#screenshots).
+
 ## What it changes
 
 | Effect | How | Cost |

@@ -325,3 +325,11 @@
   `reset --page <id>` (ids from `pages`), `reset` / `reset --all`, and `show` for what differs from the defaults
   (numeric comparison, so float formatting does not produce false positives).
 - 1.27.0: `water_glints` default 0.15 -> 0.1 (the only value that differed from the defaults after 1.26.0).
+
+## Screenshots for the site
+- The user takes them (F2); they land in `~/.local/share/horizon/screenshots/` as 2560x1440 RGBA PNG.
+- Web set lives in `assets/screenshots/` (tracked): `NN-name.jpg` 1920x1080 + `cover.jpg` 1280x720, RGB JPEG
+  q92 progressive, no EXIF/ICC/alpha. Page order: day meadow, sunset, caustics, lake, moonlight, torch night,
+  night village, night rays. Regenerate with `/usr/bin/python3` + PIL (RGBA flattens onto black, LANCZOS).
+- 1.27.0 is the first tagged version (`v1.27.0`); `dist/` is gitignored, so the `.hshader` ships as a GitHub
+  release asset, never as a tracked file.
