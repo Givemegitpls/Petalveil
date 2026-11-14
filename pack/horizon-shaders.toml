@@ -1,7 +1,7 @@
 schema = 1
 id = "petalveil"
 name = "Petalveil"
-version = "0.9.0"
+version = "0.15.0"
 api = "0.1"
 description = "Vanilla's own light kept as the base: sun shadows only touch the light from the sky, so caves, torchlight and night stay vanilla-bright. On top of that a pastel sky, rounded cubic clouds, waves and reflections on water, plants in the wind, and a soft glow."
 authors = ["BarmaleyVIP"]
@@ -11,8 +11,9 @@ shared = ["common.wgsl"]
 [sky]
 file = "sky.wgsl"
 name = "Sky"
-# Vanilla's sun and clouds both stay: they are geometry in the world, so they hide each other and
-# move against the ground when you walk. The pack only recolours the sky and adds the rainbow.
+# Vanilla's clouds stay: they are geometry in the world, so they hide the sun and move against the
+# ground when you walk. The sun is the pack's own, drawn as a pixel circle on the screen's grid.
+sun = false
 
 
 [material]
@@ -47,6 +48,12 @@ scale = 0.25
 file = "post/glow_blur.wgsl"
 name = "Glow blur"
 output = "petal_glow_b"
+scale = 0.25
+
+[[post]]
+file = "post/volumetric.wgsl"
+name = "Volumetric fog"
+output = "petal_fog"
 scale = 0.25
 
 [[post]]
@@ -133,7 +140,7 @@ blocks = ["amethyst_cluster", "*_amethyst_bud", "crying_obsidian", "nether_porta
 [[pages]]
 id = "main"
 name = "Petalveil"
-items = ["page:lighting", "page:water", "page:nature", "page:sky", "page:camera", ""]
+items = ["page:lighting", "page:water", "page:nature", "page:sky", "page:fog", "page:camera", ""]
 
 [[pages]]
 id = "lighting"
@@ -156,8 +163,14 @@ items = ["waving", "wave_strength", ""]
 [[pages]]
 id = "sky"
 name = "Sky"
-description = "The sky's pastel tint, the rainbow after rain and the night."
-items = ["sky_pastel", "cloud_edges", "rainbow", "night_mood", ""]
+description = "The sky's pastel tint, the sun's size, the rainbow after rain and the night."
+items = ["sky_pastel", "sun_pixels", "sun_scale", "sun_blur", "cloud_edges", "rainbow", "night_mood", ""]
+
+[[pages]]
+id = "fog"
+name = "Fog"
+description = "Volumetric fog: light shafts in forests and valleys, and how thick the air is."
+items = ["volumetric_fog", "fog_density", "fog_height", "fog_steps", ""]
 
 [[pages]]
 id = "camera"
@@ -275,6 +288,34 @@ max = 1.0
 step = 0.05
 
 [[options]]
+id = "sun_pixels"
+name = "Sun pixels"
+description = "How many cells across the sun's circle: fewer means chunkier pixels. Its size on screen stays vanilla's."
+type = "choice"
+values = ["8", "16", "24", "32", "48"]
+default = "16"
+
+[[options]]
+id = "sun_scale"
+name = "Sun size"
+description = "The sun's size against vanilla's quad: 0.25 (the default) is about 8 degrees across and reads like vanilla's own, 1 is the quad's full 33 degrees."
+type = "float"
+default = 0.25
+min = 0.1
+max = 1.2
+step = 0.05
+
+[[options]]
+id = "sun_blur"
+name = "Sun blur"
+description = "Radius, in pixels, of a blur on the sun alone, so its pixel rim turns into a glow. 0 keeps the hard edge."
+type = "float"
+default = 0.0
+min = 0.0
+max = 24.0
+step = 1.0
+
+[[options]]
 id = "rainbow"
 name = "Rainbow"
 description = "A rainbow opposite the sun while the rain dries."
@@ -302,6 +343,41 @@ max = 32.0
 step = 1.0
 
 [[options]]
+id = "volumetric_fog"
+name = "Volumetric fog"
+description = "Fog lit by the sun through the shadows: shafts of light in a forest or a valley. Off by default; it is the costliest option in the pack."
+type = "bool"
+default = false
+
+[[options]]
+id = "fog_density"
+name = "Fog thickness"
+description = "How thick the air is. Vanilla's own fog stays on either way."
+type = "float"
+default = 0.35
+min = 0.0
+max = 1.0
+step = 0.05
+
+[[options]]
+id = "fog_height"
+name = "Fog height"
+description = "How tall the ground layer is before the fog thins out, in blocks."
+type = "float"
+default = 24.0
+min = 4.0
+max = 64.0
+step = 2.0
+
+[[options]]
+id = "fog_steps"
+name = "Fog detail"
+description = "Steps of the march. 8 is cheap and reads the same in motion; 16 is for still screenshots."
+type = "choice"
+values = ["8", "16"]
+default = "8"
+
+[[options]]
 id = "bloom"
 name = "Glow"
 description = "A soft glow around bright things."
@@ -316,7 +392,7 @@ id = "sun_rays"
 name = "Sun rays"
 description = "Light spilling from the sun at sunrise and sunset."
 type = "float"
-default = 0.35
+default = 0.5
 min = 0.0
 max = 1.0
 step = 0.05

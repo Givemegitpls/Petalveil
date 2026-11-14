@@ -5,6 +5,9 @@
 override sky_pastel: f32 = 0.7;
 override rainbow: bool = true;
 override night_mood: f32 = 0.35;
+// Index into 8, 16, 24, 32 and 48 pixels across.
+override sun_pixels: u32 = 1u;
+override sun_scale: f32 = 0.25;
 
 fn hue_rgb(h: f32) -> vec3<f32> {
     let r = abs(h * 6.0 - 3.0) - 1.0;
@@ -13,8 +16,56 @@ fn hue_rgb(h: f32) -> vec3<f32> {
     return clamp(vec3<f32>(r, g, b), vec3<f32>(0.0), vec3<f32>(1.0));
 }
 
-// The pack's own sun is gone: vanilla's square reads better, and it hides behind the clouds
-// exactly as the game intends.
+// Vanilla's sun quad is ±30 at a distance of 100 (`celestial_geometry`); `Sun size` multiplies the
+// tangent of that, and the disc is quantised onto a grid, which makes the rim stair-step like pixel
+// art. What the game actually shows is far smaller than the quad's 33 degrees, so the default is a
+// quarter of it, about 8 degrees.
+const SUN_TANGENT: f32 = 0.3;
+
+fn sun_pixel_size() -> f32 {
+    switch sun_pixels {
+        case 0u: {
+            return 8.0;
+        }
+        case 2u: {
+            return 24.0;
+        }
+        case 3u: {
+            return 32.0;
+        }
+        case 4u: {
+            return 48.0;
+        }
+        default: {
+            return 16.0;
+        }
+    }
+}
+
+// The sun drawn by hand: a circle of `sun_pixel_size()` cells across, each cell one flat square, so
+// it reads as pixel art and not as a soft gradient. Vanilla's sun is off (`[sky] sun = false`);
+// vanilla's clouds still draw over this one.
+fn sun_disc(d: vec3<f32>) -> vec3<f32> {
+    let forward = frame.sun_direction;
+    let facing = dot(d, forward);
+    if facing <= 0.0 || forward.y < -0.02 {
+        return vec3<f32>(0.0);
+    }
+    // Where the ray meets the sun's own plane, in the plane's units.
+    let right = normalize(cross(forward, vec3<f32>(0.0, 1.0, 0.0)) + vec3<f32>(1e-5, 0.0, 0.0));
+    let up = cross(right, forward);
+    let q = vec2<f32>(dot(d, right), dot(d, up)) / (facing * SUN_TANGENT * max(sun_scale, 0.05));
+    let grid = sun_pixel_size();
+    // One cell per grid square; its centre decides whether the cell is lit.
+    let cell = floor((q * 0.5 + 0.5) * grid);
+    let centre = (cell + vec2<f32>(0.5)) / grid * 2.0 - 1.0;
+    if dot(centre, centre) > 1.0 {
+        return vec3<f32>(0.0);
+    }
+    let up_amount = smoothstep(-0.02, 0.06, forward.y);
+    let warm = mix(vec3<f32>(1.0, 0.55, 0.26), vec3<f32>(1.0, 0.97, 0.9), smoothstep(0.0, 0.3, forward.y));
+    return warm * 1.1 * up_amount;
+}
 
 fn sky(input: SkyInput) -> vec4<f32> {
     let d = input.direction;
@@ -42,6 +93,8 @@ fn sky(input: SkyInput) -> vec4<f32> {
     // Night: a cooler sky with the brightness kept, so the night stays readable.
     c = mix(c, retint(c, vec3<f32>(0.8, 0.88, 1.14)), night * night_mood * 0.8);
     c = mix(c, c + vec3<f32>(0.004, 0.008, 0.018), night * night_mood);
+
+    c += sun_disc(d);
 
 
     // A rainbow opposite the sun while the rain dries: the primary bow, red outside, violet in.

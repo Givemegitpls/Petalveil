@@ -16,10 +16,13 @@ wind and a soft glow on top.
 | Water | Rolling waves and their normals, the world's mirror at a slant (Fresnel), a sun glint, depth shading, storm foam, flowing sheets | Horizon's half-resolution mirror, can be off |
 | Waving leaves and plants | Vertex stage, continuous across two-block plants, still in caves and pots | a few `sin`s per vertex |
 | Sky | Vanilla's colour with a lilac and peach veil, a cooler night that keeps its brightness | per sky pixel |
+| Sun | A circle on a grid of 8 to 48 cells, hard-edged on purpose. `Sun size` scales vanilla's quad tangent; 0.25, the default, is about 8 degrees across and matches what the game shows. Vanilla's clouds still hide it | a few dots per sky pixel |
 | Rainbow | The primary bow opposite the sun while the rain dries | a few multiplies |
+| Sun blur | A second spiral blur, on the sun's own pixels only (a ray-alignment mask against `sun_direction`), so its pixel rim turns into a glow. Off by default | a depth tap per pixel, twelve taps on the sun |
 | Cloud edge blur | A radial blur (a Vogel spiral of 16 taps) applied only where the depth says the pixel is in the cloud layer, and weighted to the rim, so the body of a cloud keeps its shading. The slider is the radius in pixels | five depth taps per pixel, sixteen blur taps on a rim |
 | Glow | Karis-averaged bright pass and a nine-tap blur, both at a quarter of the resolution | ~1/16 of the pixels |
-| Sun rays | A dithered march over the sky mask, a quarter of the resolution | ~1/16 of the pixels |
+| Sun rays | A dithered march toward the sun's screen position over the sky mask, a quarter of the resolution; the sun may be outside the frame, and only samples inside it count | ~1/16 of the pixels |
+| Volumetric fog | 8 steps of a march toward what the depth holds, lit by the sun through the shadow map, at a quarter of the resolution; off by default | ~1/16 of the pixels |
 | Grade | A hair of lift in the deepest black, gentle S-curve, saturation, optional vignette, dither | one pass |
 
 The Nether and the End are left exactly as vanilla draws them.
@@ -33,7 +36,8 @@ The Nether and the End are left exactly as vanilla draws them.
   hue of torches, soul fire and the like without brightening them.
 - **Water**: reflections, waves, how far you see into water.
 - **Nature**: waving plants and the wind's strength.
-- **Sky**: pastel amount, cloud edge blur radius, the rainbow, the night mood.
+- **Sky**: pastel amount, the sun's cell count and size, the sun's blur, cloud edge blur radius, the rainbow, the night mood.
+- **Fog**: volumetric fog off/on, its thickness and height, and the march's step count (8 is the cheap one).
 - **Camera**: glow, sun rays, exposure, contrast, saturation, vignette.
 
 Vanilla's sun and vanilla's clouds are kept: they are geometry in the world, so they hide each other and move

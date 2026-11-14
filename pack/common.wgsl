@@ -28,6 +28,8 @@ const VANILLA_GAIN: f32 = 1.0;
 
 // Declared here because the material and vertex stages share one module: a wave option belongs to both.
 override water_waves: bool = true;
+// Sunlight's gain, used by the terrain light and by the fog's in-scattering.
+override sun_strength: f32 = 1.0;
 
 fn luma(c: vec3<f32>) -> f32 {
     return dot(c, vec3<f32>(0.2126, 0.7152, 0.0722));
@@ -61,6 +63,21 @@ fn storm_amount() -> f32 {
 fn retint(c: vec3<f32>, hue: vec3<f32>) -> vec3<f32> {
     let t = hue / max(luma(hue), 0.001);
     return c * t;
+}
+
+// The colour and strength of this frame's direct light: the sun by day, the moon by night. Lives in
+// the shared file because the fog pass lights its air with it too.
+fn direct_color() -> vec3<f32> {
+    let l = frame.light_direction;
+    let is_sun = dot(l, frame.sun_direction) > 0.0;
+    // Orange only near the horizon: by mid-morning the light is a soft warm white.
+    let high = smoothstep(0.0, 0.3, l.y);
+    let sun = mix(vec3<f32>(1.0, 0.62, 0.34), vec3<f32>(1.0, 0.96, 0.9), high);
+    let moon = vec3<f32>(0.62, 0.72, 1.0);
+    let weather = 1.0 - 0.85 * max(frame.rain, frame.thunder);
+    // A sunset gives a little more of its warm light, which the fade at the horizon then dims.
+    let gain = select(MOON_ADD, SUN_ADD * (1.0 + 0.8 * sun_low()), is_sun) * sun_strength;
+    return select(moon, sun, is_sun) * gain * smoothstep(0.0, 0.06, l.y) * weather;
 }
 
 // A soft shoulder above 0.78, so bright light rolls into white instead of clipping.

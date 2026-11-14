@@ -25,7 +25,20 @@
 - Turn on from CLI: `horizon-launcher packs on --kind shader "Petalveil"` (title or filename, `--kind shader`).
 - The user takes the screenshots; the agent does not launch the game.
 
+## User's design line- "Atmosphere is the sum of elements, not the quality of each": they explicitly accept cheap, fake effects over
+  honest simulation as long as the frame reads right. Prefer quarter/half resolution passes, few steps, masks and
+  blur over raymarched truth; report the cost, not the technique.
+- Sun: pixel-round, size by eye, not by geometry. Vanilla's quad is ±30 at a distance of 100
+  (`celestial_geometry`), but what the game shows is ~5-8 degrees, so `sun_scale` 0.25 of the quad tangent
+  (≈8 degrees) is the default; the option is only the grid's cell count (8..48). Two earlier attempts were
+  wrong: 16 screen pixels (~1 degree, "tiny") and the full quad (33 degrees, "too big by 3×").
+
 ## Lessons from the user's screenshots
+- Godrays must not stop when the sun leaves the frame: project the sun even outside the frustum (reject only
+  `clip.w <= 0` or a UV beyond about -3..4) and *skip* samples that fall outside the picture instead of clamping
+  them, or the border smears across the scene. Occlusion is depth-based, so terrain, clouds and water end the ray;
+  entities cannot be excluded — a post pass sees one depth buffer only. The user decided that is fine, even
+  better: entities blocking the shafts is the wanted look. Do not "fix" it.
 - Flat clouds read as "glued to the camera" and make the walk feel like swaying. A sky-stage cloud is a picture on
   the dome: it cannot parallax like vanilla's cloud geometry, and the user rejected both my flat version and the
   volumetric one. Vanilla's clouds are kept: they are world geometry, they hide the sun, they move against the
@@ -47,6 +60,9 @@
 - A blur softens the rim but cannot round a cube's corners: that needs the engine's geometry or the pack's
   own raymarched clouds, which the user rejected as worse than vanilla's. Say so instead of promising the
   Complementary look. Their reference frame cost 13.3 ms of GPU, this pack runs at ~3.8 ms.
+- Sun blur (`sun_blur`, Sky page, 0..24 px, default 0) is its own radial blur in `post/composite.wgsl`, masked by
+  the ray's alignment with `sun_direction` and limited to sky pixels, so a cloud in front of the sun keeps its
+  edge. Same Vogel spiral as the cloud blur, twelve taps.
 - Vanilla shades each cloud face per cube, so a mass shows hard bright/dark bands across its body. The same
   radial blur is applied to the body at 0.65 where the disc is fully cloud (`body` in `cloud_soft`), which
   softens them; the rim keeps the full blend.
