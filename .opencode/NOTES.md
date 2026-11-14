@@ -34,6 +34,14 @@
   wrong: 16 screen pixels (~1 degree, "tiny") and the full quad (33 degrees, "too big by 3×").
 
 ## Lessons from the user's screenshots
+- Noise lesson: per-pixel `ign()` jitter in a pass that draws at a quarter or half resolution upscales into
+  visible grain over the whole picture (rays, fog). Use a fixed half-step there, and only dither at full
+  resolution (the last pass, 0.6/255). Per-pixel spiral rotation in a blur is the same trap: quantise the seed
+  to a 4-pixel grid. But removing the jitter exposed the march itself: at 16 fixed steps the rays read as
+  hard rings and spokes around the sun ("стало хуже"). More samples alone did not remove them. The working
+  recipe for a quarter-res raymarch of a binary mask: per-pixel jitter (kills the rings), plus a nine-tap tent
+  blur of the target in the composite (kills the grain), 24 taps. Dither and blur are a pair — neither alone
+  looks right.
 - Godrays must not stop when the sun leaves the frame: project the sun even outside the frustum (reject only
   `clip.w <= 0` or a UV beyond about -3..4) and *skip* samples that fall outside the picture instead of clamping
   them, or the border smears across the scene. Occlusion is depth-based, so terrain, clouds and water end the ray;
@@ -69,6 +77,11 @@
 - A blur disc that averages the ground smears the land's silhouette where a cloud stands behind a hill: taps
   on solid ground are skipped, and a ground pixel is never processed. That was a real regression the user
   caught.
+- The user's tuned values (2026-11-14, read from `shaderpacks/.horizon-options/petalveil.txt`): shadow depth 1.6,
+  sun blur 14, cloud blur 5, volumetric fog on, thickness 0.55, height 42. Those three are now the shipped
+  defaults; read that file instead of asking.
+- Fog colour: it must follow `fog_color`/`sky_color` (the user's words: "follow the clouds"). A few percent of
+  ambient leaves shaded fog black and it reads as smog.
 - Shadow darkness is `SHADE` (0.18) times the `shadow_strength` option (0..3, default 1 = the agreed look):
   keep the default, the user only asked for room to go deeper.
 - `bobView:true` in the instance's `options.txt`: the engine bobs the camera. The user says vanilla and the

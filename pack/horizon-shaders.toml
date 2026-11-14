@@ -1,7 +1,7 @@
 schema = 1
 id = "petalveil"
 name = "Petalveil"
-version = "0.15.0"
+version = "0.20.0"
 api = "0.1"
 description = "Vanilla's own light kept as the base: sun shadows only touch the light from the sky, so caves, torchlight and night stay vanilla-bright. On top of that a pastel sky, rounded cubic clouds, waves and reflections on water, plants in the wind, and a soft glow."
 authors = ["BarmaleyVIP"]
@@ -212,9 +212,9 @@ default = "Soft"
 [[options]]
 id = "shadow_strength"
 name = "Shadow depth"
-description = "How dark a shadow is. 1 is the pack's default, above it the shade deepens, 0 makes shadows invisible but still turns off the sun's light in them."
+description = "How dark a shadow is. 1.6 is the pack's default, above it the shade deepens, 0 makes shadows invisible but still turns off the sun's light in them."
 type = "float"
-default = 1.0
+default = 1.6
 min = 0.0
 max = 3.0
 step = 0.05
@@ -308,9 +308,9 @@ step = 0.05
 [[options]]
 id = "sun_blur"
 name = "Sun blur"
-description = "Radius, in pixels, of a blur on the sun alone, so its pixel rim turns into a glow. 0 keeps the hard edge."
+description = "Radius, in pixels, of a blur on the sun alone, so its pixel rim turns into a glow. 14 is the pack's default; 0 keeps the hard edge."
 type = "float"
-default = 0.0
+default = 14.0
 min = 0.0
 max = 24.0
 step = 1.0
@@ -335,9 +335,9 @@ step = 0.05
 [[options]]
 id = "cloud_edges"
 name = "Cloud edge blur"
-description = "Radius, in pixels, of the blur on vanilla's cloud rims. Higher is softer. Only the clouds are affected; 0 turns it off."
+description = "Radius, in pixels, of the blur on vanilla's cloud rims. Higher is softer. Only the clouds are affected; 5 is the pack's default, 0 turns it off."
 type = "float"
-default = 8.0
+default = 5.0
 min = 0.0
 max = 32.0
 step = 1.0

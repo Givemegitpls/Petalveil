@@ -35,14 +35,18 @@ fn post(input: PostInput) -> vec4<f32> {
     let dir = normalize(view_position(input.uv, max(depth, 0.001)));
 
     let step = reach / f32(step_count());
-    let jitter = ign(input.pixel);
+    // No per-pixel jitter: the pass draws at a quarter of the resolution, so noise upscales into grain.
+    let jitter = 0.5;
     // Forward scattering: the air glows when the sun is behind it, which is what makes the shafts.
     let g = 0.4;
     let cos_t = dot(dir, frame.sun_direction);
     let phase = (1.0 - g * g) / (12.5663706 * pow(max(1.0 + g * g - 2.0 * g * cos_t, 0.001), 1.5));
     let sun = direct_color();
-    let ambient = frame.sky_color * 0.10 + frame.fog_color * 0.06;
-    let weather = 1.0 + 0.8 * frame.wetness + 1.4 * frame.thunder;
+    // Haze is air, not soot: it takes the colour of what surrounds it — vanilla's fog at the horizon
+    // mixed with the sky above — and the sun only brightens it toward itself. A small ambient alone
+    // is what made the fog read as black smog.
+    let ambient = mix(frame.fog_color, frame.sky_color, 0.5) * 0.85 + vec3<f32>(0.04);
+    let weather = 1.0 + 0.6 * frame.wetness + 1.0 * frame.thunder;
 
     var trans = 1.0;
     var scattered = vec3<f32>(0.0);
@@ -52,7 +56,7 @@ fn post(input: PostInput) -> vec4<f32> {
         let world_y = p.y + frame.camera_position.y;
         // A layer that hugs the ground and thins out with height.
         let height = exp(-max(world_y - 58.0, 0.0) / max(fog_height, 2.0));
-        let density = fog_density * 0.02 * height * weather;
+        let density = fog_density * 0.010 * height * weather;
         if density > 0.000001 {
             var lit = 1.0;
             if frame.has_shadow == 1u && length(p) < frame.shadow_distance {
@@ -61,7 +65,7 @@ fn post(input: PostInput) -> vec4<f32> {
                     lit = textureSampleCompareLevel(shadow_map, shadow_sampler, s.xy, s.z - frame.shadow_center_texel * 0.6);
                 }
             }
-            let light = sun * lit * phase * 2.5 + ambient;
+            let light = ambient + sun * lit * phase * 1.6;
             let absorbed = 1.0 - exp(-density * step);
             scattered += trans * absorbed * light * open;
             trans *= 1.0 - absorbed;

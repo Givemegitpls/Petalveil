@@ -27,11 +27,13 @@ fn post(input: PostInput) -> vec4<f32> {
         return vec4<f32>(0.0, 0.0, 0.0, 1.0);
     }
     let toward_sun = sun.xy - input.uv;
-    // A dithered start hides the steps of the march, so a dozen samples are enough.
+    // A per-pixel start breaks the march's own rings and spokes into noise; the composite then blurs
+    // this target, which averages the noise away and leaves a smooth gradient. Noise without the blur
+    // reads as grain, a fixed start without the noise reads as spokes — this pass needs both halves.
     let jitter = ign(input.pixel);
     var sum = 0.0;
-    for (var i = 0; i < 16; i++) {
-        let t = (f32(i) + jitter) / 16.0;
+    for (var i = 0; i < 24; i++) {
+        let t = (f32(i) + jitter) / 24.0;
         let uv = input.uv + toward_sun * t;
         // A sample outside the picture says nothing about the air; it is skipped, not clamped, so a
         // sun beyond the frame does not smear the border over the scene.
@@ -44,5 +46,5 @@ fn post(input: PostInput) -> vec4<f32> {
         let falloff = 1.0 - t;
         sum += sky * falloff * falloff;
     }
-    return vec4<f32>(vec3<f32>(sum / 16.0 * 2.6), 1.0);
+    return vec4<f32>(vec3<f32>(sum / 24.0 * 2.6), 1.0);
 }

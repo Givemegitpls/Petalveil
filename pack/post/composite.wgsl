@@ -141,14 +141,14 @@ fn post(input: PostInput) -> vec4<f32> {
                 || cloud_mask(input.uv - vec2<f32>(0.0, ring.y)) > 0.0;
         }
         if near_cloud {
-            c = cloud_soft(input.uv, cloud_edges, ign(input.pixel));
+            c = cloud_soft(input.uv, cloud_edges, ign(floor(input.pixel / vec2<f32>(4.0)) * 4.0));
         }
     }
     // The sun's own softening, separate from the clouds' and off by default.
     if sun_blur > 0.0 {
         let mask = sun_mask(input.uv);
         if mask > 0.0 {
-            c = mix(c, sun_soft(input.uv, sun_blur, ign(input.pixel)), mask);
+            c = mix(c, sun_soft(input.uv, sun_blur, ign(floor(input.pixel / vec2<f32>(4.0)) * 4.0)), mask);
         }
     }
 
@@ -165,8 +165,20 @@ fn post(input: PostInput) -> vec4<f32> {
         c += textureSampleLevel(petal_glow_b, linear_sampler, input.uv, 0.0).rgb * bloom;
     }
     if sun_rays > 0.0 {
-        let r = textureSampleLevel(petal_rays, linear_sampler, input.uv, 0.0).r;
-        c += vec3<f32>(1.0, 0.86, 0.7) * r * sun_rays * (0.35 + 0.65 * sun_low()) * day;
+        // A nine-tap tent over the quarter-size ray target. It is what turns the march's dithered
+        // samples into a gradient: no grain, no spokes, and it still follows the clouds' edges.
+        let r = 1.0 / vec2<f32>(max(textureDimensions(petal_rays), vec2<u32>(1u, 1u)));
+        let at = input.uv;
+        var ray = textureSampleLevel(petal_rays, linear_sampler, at, 0.0).r * 0.25;
+        ray += textureSampleLevel(petal_rays, linear_sampler, at + vec2<f32>(r.x, 0.0), 0.0).r * 0.125;
+        ray += textureSampleLevel(petal_rays, linear_sampler, at - vec2<f32>(r.x, 0.0), 0.0).r * 0.125;
+        ray += textureSampleLevel(petal_rays, linear_sampler, at + vec2<f32>(0.0, r.y), 0.0).r * 0.125;
+        ray += textureSampleLevel(petal_rays, linear_sampler, at - vec2<f32>(0.0, r.y), 0.0).r * 0.125;
+        ray += textureSampleLevel(petal_rays, linear_sampler, at + r, 0.0).r * 0.0625;
+        ray += textureSampleLevel(petal_rays, linear_sampler, at - r, 0.0).r * 0.0625;
+        ray += textureSampleLevel(petal_rays, linear_sampler, at + vec2<f32>(r.x, -r.y), 0.0).r * 0.0625;
+        ray += textureSampleLevel(petal_rays, linear_sampler, at + vec2<f32>(-r.x, r.y), 0.0).r * 0.0625;
+        c += vec3<f32>(1.0, 0.86, 0.7) * ray * sun_rays * (0.35 + 0.65 * sun_low()) * day;
     }
 
     c *= exposure;
@@ -191,7 +203,8 @@ fn post(input: PostInput) -> vec4<f32> {
         c *= 1.0 - smoothstep(0.55, 1.1, d) * vignette * 0.8;
     }
 
-    // A little noise keeps flat sky and darkness from banding on an 8-bit frame.
-    c += (ign(input.pixel) - 0.5) * (1.0 / 255.0);
+    // Half a step of 8-bit noise: enough to break banding in a sky gradient, small enough not to read
+    // as grain on a 1080p screen.
+    c += (ign(input.pixel) - 0.5) * (0.6 / 255.0);
     return vec4<f32>(clamp(c, vec3<f32>(0.0), vec3<f32>(1.0)), input.color.a);
 }

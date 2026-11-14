@@ -163,6 +163,23 @@ expensive, since `select` evaluates both.
 - **Dimensions**: guard Overworld-only effects with `frame.dimension == 0` and return vanilla for the
   rest.
 
+## Cheap passes that must not look cheap
+
+A quarter-resolution raymarch (rays, fog) over a **binary** mask (depth says sky or not) quantises into hard
+rings and spokes radiating from the light. The recipe that works:
+
+- **dither and blur are a pair.** A per-pixel jitter on the march's start (`ign(input.pixel)`) turns the rings
+  into noise; a small tent blur of that target in the composite (nine taps of a quarter-size target) averages
+  the noise back into a gradient. Jitter without the blur reads as grain over the whole picture; the blur
+  without the jitter leaves spokes. Neither alone is acceptable — this took two rejected builds to learn.
+- More samples alone (16 → 32) does not remove the spokes.
+- Keep the jitter of a *blur* (spiral rotation) on a coarse grid (`floor(pixel / 4.0)`), or every pixel gets a
+  different sampling pattern and the rim turns to salt and pepper.
+- Dither once, in the last (full-resolution) pass, and only about half a step of 8 bits.
+
+Fog is air: take its colour from `frame.fog_color` blended with `frame.sky_color` (plus the sun's forward
+scattering). An "ambient" term of a few percent leaves the shaded fog black, which reads as smog.
+
 ## Limits
 
 12 post passes and 4 post targets, 64 options, 20000 naga expressions and 64 texture reads per stage,
