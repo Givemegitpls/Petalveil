@@ -8,6 +8,7 @@ override night_mood: f32 = 0.35;
 // Index into 8, 16, 24, 32 and 48 pixels across.
 override sun_pixels: u32 = 1u;
 override sun_scale: f32 = 0.25;
+override sun: bool = true;
 
 fn hue_rgb(h: f32) -> vec3<f32> {
     let r = abs(h * 6.0 - 3.0) - 1.0;
@@ -94,7 +95,9 @@ fn sky(input: SkyInput) -> vec4<f32> {
     c = mix(c, retint(c, vec3<f32>(0.8, 0.88, 1.14)), night * night_mood * 0.8);
     c = mix(c, c + vec3<f32>(0.004, 0.008, 0.018), night * night_mood);
 
-    c += sun_disc(d);
+    if sun {
+        c += sun_disc(d);
+    }
 
 
     // A rainbow opposite the sun while the rain dries: the primary bow, red outside, violet in.

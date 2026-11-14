@@ -25,7 +25,10 @@
 - Turn on from CLI: `horizon-launcher packs on --kind shader "Petalveil"` (title or filename, `--kind shader`).
 - The user takes the screenshots; the agent does not launch the game.
 
-## User's design line- "Atmosphere is the sum of elements, not the quality of each": they explicitly accept cheap, fake effects over
+## User's design line
+- **Every effect must be switchable off** (or have a neutral value): the user asks for this explicitly. Audit the
+  option list when adding anything; the sun was the one hole (manifest `[sky] sun = false` makes vanilla's sun
+  unreachable at runtime, so it got its own `Sun` bool).- "Atmosphere is the sum of elements, not the quality of each": they explicitly accept cheap, fake effects over
   honest simulation as long as the frame reads right. Prefer quarter/half resolution passes, few steps, masks and
   blur over raymarched truth; report the cost, not the technique.
 - Sun: pixel-round, size by eye, not by geometry. Vanilla's quad is ±30 at a distance of 100
@@ -80,6 +83,9 @@
 - The user's tuned values (2026-11-14, read from `shaderpacks/.horizon-options/petalveil.txt`): shadow depth 1.6,
   sun blur 14, cloud blur 5, volumetric fog on, thickness 0.55, height 42. Those three are now the shipped
   defaults; read that file instead of asking.
+- Root cause of the "рябь": IGN dither in the last pass, not the rays. IGN is a fixed diagonal pattern and its
+  amplitude is absolute — fine on mid-tones, 6% relative on dark grass. It is now white hash noise (option
+  `Dither`, default on). Keep it off IGN.
 - Fog colour: it must follow `fog_color`/`sky_color` (the user's words: "follow the clouds"). A few percent of
   ambient leaves shaded fog black and it reads as smog.
 - Shadow darkness is `SHADE` (0.18) times the `shadow_strength` option (0..3, default 1 = the agreed look):

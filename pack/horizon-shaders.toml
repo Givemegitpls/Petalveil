@@ -1,7 +1,7 @@
 schema = 1
 id = "petalveil"
 name = "Petalveil"
-version = "0.20.0"
+version = "0.22.0"
 api = "0.1"
 description = "Vanilla's own light kept as the base: sun shadows only touch the light from the sky, so caves, torchlight and night stay vanilla-bright. On top of that a pastel sky, rounded cubic clouds, waves and reflections on water, plants in the wind, and a soft glow."
 authors = ["BarmaleyVIP"]
@@ -164,7 +164,7 @@ items = ["waving", "wave_strength", ""]
 id = "sky"
 name = "Sky"
 description = "The sky's pastel tint, the sun's size, the rainbow after rain and the night."
-items = ["sky_pastel", "sun_pixels", "sun_scale", "sun_blur", "cloud_edges", "rainbow", "night_mood", ""]
+items = ["sky_pastel", "sun", "sun_pixels", "sun_scale", "sun_blur", "cloud_edges", "rainbow", "night_mood", ""]
 
 [[pages]]
 id = "fog"
@@ -176,7 +176,7 @@ items = ["volumetric_fog", "fog_density", "fog_height", "fog_steps", ""]
 id = "camera"
 name = "Camera"
 description = "Edge smoothing, glow, sun rays and the colour grade."
-items = ["bloom", "sun_rays", "exposure", "contrast", "saturation", "vignette"]
+items = ["bloom", "sun_rays", "exposure", "contrast", "saturation", "vignette", "dither"]
 
 [[options]]
 id = "shadows"
@@ -286,6 +286,13 @@ default = 0.7
 min = 0.0
 max = 1.0
 step = 0.05
+
+[[options]]
+id = "sun"
+name = "Sun"
+description = "The pack's own sun. Vanilla's is replaced by it, so off leaves the sky without a disc; the sunlight on the world stays."
+type = "bool"
+default = true
 
 [[options]]
 id = "sun_pixels"
@@ -423,6 +430,13 @@ default = 1.06
 min = 0.8
 max = 1.4
 step = 0.02
+
+[[options]]
+id = "dither"
+name = "Dither"
+description = "Half a step of noise that breaks banding in smooth gradients. Off, a sky gradient may band on an 8-bit screen; on, it is a barely visible film grain."
+type = "bool"
+default = true
 
 [[options]]
 id = "vignette"

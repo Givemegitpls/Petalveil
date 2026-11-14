@@ -175,7 +175,12 @@ rings and spokes radiating from the light. The recipe that works:
 - More samples alone (16 → 32) does not remove the spokes.
 - Keep the jitter of a *blur* (spiral rotation) on a coarse grid (`floor(pixel / 4.0)`), or every pixel gets a
   different sampling pattern and the rim turns to salt and pepper.
-- Dither once, in the last (full-resolution) pass, and only about half a step of 8 bits.
+- Dither once, in the last (full-resolution) pass, and only about half a step of 8 bits. Never use IGN
+  (interleaved gradient noise) for it: IGN is a *structured* diagonal pattern and its amplitude is absolute, so
+  the same 0.3 steps are invisible on mid-tones but a 6% screen door over dark grass. Use a white hash per pixel.
+- When the user reports "рябь" over the whole picture at once, the causes are, in order: the final dither, a
+  per-pixel jitter in a quarter-res pass, and a per-pixel rotation in a blur. Give the dither a `bool` option so
+  the first can be ruled out in one click.
 
 Fog is air: take its colour from `frame.fog_color` blended with `frame.sky_color` (plus the sun's forward
 scattering). An "ambient" term of a few percent leaves the shaded fog black, which reads as smog.
