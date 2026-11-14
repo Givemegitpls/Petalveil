@@ -324,3 +324,4 @@
   `reset = false`, so a per-option or per-page reset cannot exist in the pack format. `tools/options.py` covers it:
   `reset --page <id>` (ids from `pages`), `reset` / `reset --all`, and `show` for what differs from the defaults
   (numeric comparison, so float formatting does not produce false positives).
+- 1.27.0: `water_glints` default 0.15 -> 0.1 (the only value that differed from the defaults after 1.26.0).
