@@ -1,7 +1,6 @@
 // The last pass: cloud edges, glow and sun rays over the world, then a soft grade that keeps
 // vanilla's balance.
 
-override volumetric_fog: bool = false;
 override cloud_edges: f32 = 8.0;
 override bloom: f32 = 0.35;
 override sun_rays: f32 = 0.35;
@@ -112,12 +111,6 @@ fn post(input: PostInput) -> vec4<f32> {
     }
     let day = daylight();
     let night = nightfall();
-
-    // Fog sits between the world and the glow: the shafts are part of the picture, not a lens flare.
-    if volumetric_fog {
-        let fog = textureSampleLevel(petal_fog, linear_sampler, input.uv, 0.0);
-        c = c * (1.0 - clamp(fog.a, 0.0, 1.0)) + fog.rgb;
-    }
 
     if bloom > 0.0 {
         c += textureSampleLevel(petal_glow_b, linear_sampler, input.uv, 0.0).rgb * bloom;

@@ -161,10 +161,23 @@ fn water_surface(input: MaterialInput) -> vec4<f32> {
     // The surface: our own refraction. The bed is read from the picture taken before the translucent
     // pass, at a coordinate bent by the wave, so the bottom under the water moves with the swell.
     let size = vec2<f32>(textureDimensions(opaque_color));
-    let bent_uv = clamp(input.screen + bend + n.xz * 0.02, vec2<f32>(0.001), vec2<f32>(0.999));
+    let own = length(input.position);
+    let plain_uv = clamp(input.screen, vec2<f32>(0.001), vec2<f32>(0.999));
+    let plain_at = vec2<i32>(min(plain_uv * size, size - 1.0));
+    let plain_depth = textureLoad(opaque_depth, plain_at, 0);
+    let plain_dist = depth_distance(plain_uv, plain_depth);
+    // How much water stands under this pixel. Along the shoreline there is almost none, and a bent
+    // sample there drags the sand above the waterline into the water: the seam then reads as if the
+    // block were deformed. The bend grows only once the bed is a block or so below the surface.
+    let bendable = smoothstep(0.06, 0.9, max(plain_dist - own, 0.0));
+    let bent_uv = clamp(plain_uv + (bend + n.xz * 0.02) * bendable, vec2<f32>(0.001), vec2<f32>(0.999));
     let bent_at = vec2<i32>(min(bent_uv * size, size - 1.0));
-    var behind = textureLoad(opaque_color, bent_at, 0).rgb;
-    let thickness = max(depth_distance(bent_uv, textureLoad(opaque_depth, bent_at, 0)) - length(input.position), 0.0);
+    let bent_dist = depth_distance(bent_uv, textureLoad(opaque_depth, bent_at, 0));
+    // A tap that comes back in front of the water surface is a block standing out of the water, not the
+    // bed: keep the unbent one, so a wall beside the water is never painted across it.
+    let use_bent = bent_dist > own + 0.35;
+    var behind = textureLoad(opaque_color, select(plain_at, bent_at, use_bent), 0).rgb;
+    let thickness = max(select(plain_dist, bent_dist, use_bent) - own, 0.0);
     let reach = mix(2.0, 12.0, water_clarity);
 
     // Shallow water is the bed with a turquoise cast; deep water is its own colour, darkening with depth.

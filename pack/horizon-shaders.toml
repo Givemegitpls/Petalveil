@@ -1,7 +1,7 @@
 schema = 1
 id = "petalveil"
 name = "Petalveil"
-version = "1.27.0"
+version = "1.28.0"
 api = "0.1"
 description = "Vanilla's own light kept as the base: sun shadows only touch the light from the sky, so caves, torchlight and night stay vanilla-bright. On top of that a pastel sky, rounded cubic clouds, waves and reflections on water, plants in the wind, and a soft glow."
 authors = ["BarmaleyVIP"]
@@ -47,12 +47,6 @@ scale = 0.25
 file = "post/glow_blur.wgsl"
 name = "Glow blur"
 output = "petal_glow_b"
-scale = 0.25
-
-[[post]]
-file = "post/volumetric.wgsl"
-name = "Volumetric fog"
-output = "petal_fog"
 scale = 0.25
 
 [[post]]
@@ -139,7 +133,7 @@ blocks = ["amethyst_cluster", "*_amethyst_bud", "crying_obsidian", "nether_porta
 [[pages]]
 id = "main"
 name = "Petalveil"
-items = ["page:lighting", "page:water", "page:nature", "page:sky", "page:fog", "page:camera", ""]
+items = ["page:lighting", "page:water", "page:nature", "page:sky", "page:camera", ""]
 
 [[pages]]
 id = "lighting"
@@ -182,12 +176,6 @@ id = "sky"
 name = "Sky"
 description = "The sky's pastel tint, the clouds' edges, the rainbow after rain and the night."
 items = ["sky_pastel", "cloud_edges", "rainbow", "night_mood", ""]
-
-[[pages]]
-id = "fog"
-name = "Fog"
-description = "Volumetric fog: light shafts in forests and valleys, and how thick the air is."
-items = ["volumetric_fog", "fog_density", "fog_height", "fog_light", "fog_steps", ""]
 
 [[pages]]
 id = "camera"
@@ -662,51 +650,6 @@ default = 10.0
 min = 0.0
 max = 64.0
 step = 1.0
-
-[[options]]
-id = "volumetric_fog"
-name = "Volumetric fog"
-description = "Fog lit by the sun through the shadows: shafts of light in a forest or a valley. Off by default; it is the costliest option in the pack."
-type = "bool"
-default = false
-
-[[options]]
-id = "fog_density"
-name = "Fog thickness"
-description = "How thick the air is. Vanilla's own fog stays on either way."
-type = "float"
-default = 1
-min = 0.0
-max = 1.0
-step = 0.05
-
-[[options]]
-id = "fog_height"
-name = "Fog height"
-description = "How tall the ground layer is before the fog thins out, in blocks."
-type = "float"
-default = 42.0
-min = 4.0
-max = 64.0
-step = 2.0
-
-[[options]]
-id = "fog_light"
-name = "Fog light shafts"
-description = "How strongly the sun and the moon light the air along their shadows: this is what makes shafts visible from any angle, including with the light behind you. 0 leaves a plain haze."
-type = "float"
-default = 3
-min = 0.0
-max = 3.0
-step = 0.05
-
-[[options]]
-id = "fog_steps"
-name = "Fog detail"
-description = "Steps of the march. 8 is cheap and reads the same in motion; 16 is for still screenshots."
-type = "choice"
-values = ["8", "16"]
-default = "16"
 
 [[options]]
 id = "bloom"

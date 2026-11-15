@@ -1,5 +1,20 @@
 # Petalveil (Horizon shader pack)
 
+## Current state (1.28.0, 2026-11-15)
+- Stages: `sky`, `material` (+ `lighting.wgsl`, `water.wgsl`), `vertex`, `[shadow]`, `[reflection]`, and four
+  `[[post]]` passes (glow prefilter, glow blur, sun rays, composite+grade). No `[weather]` stage.
+- Options: **59 of the 64** allowed. The five free slots are meant for the rain-ring modes (see below).
+- Removed and archived at repo level (a `.wgsl` inside `pack/` that no stage names fails `check`): the pixel sun
+  (`assets/pixel-sun.removed.wgsl`) and the volumetric fog (`assets/volumetric.removed.wgsl`, 1.28.0).
+- Water is the pack's own: opaque surface with its own refraction, waves on the normal plus a tiny vertex drop,
+  rain rings, glitter, caustics on terrain (via the translucent shadow map), colour/saturation/hue, clarity and
+  murk. Every one of them has a bool or a 0 value that turns it off.
+- Rain rings today: one bool `rain_ripples` (default off). The stock rings are `minecraft:rain` particles and a
+  pack cannot touch them; the plan is three modes (Vanilla / Pack's own / Both) once the engine or a companion
+  resource pack can hide them.
+- Shipped defaults are the user's tuned file as of 1.27.0 (minus the fog options). Read
+  `shaderpacks/.horizon-options/petalveil.txt` before changing a default; the game deletes entries equal to it.
+
 ## Tooling
 - Build the checker once: `git clone --filter=blob:none https://github.com/horizon-rust/horizon.git` in `/tmp/opencode`,
   then `cargo build -p horizon-shader-api --bin horizon-shader` (needs the WHOLE workspace checked out: sparse
@@ -120,7 +135,8 @@
   mirror shows flat sky and the swell cannot read in it. The near field needs its own cues: a broad specular
   lobe (`pow(dot(n, halfway), 18)`) and a slow fine shimmer, both gated by daylight and shadows.
 - The game draws its own rain rings on wet water, so the pack's rings are an option now: `Rain rings`
-  = Vanilla (default, ours off) or Pack's own (ours on top; the vanilla ones cannot be removed from a pack).
+  = Vanilla (default, ours off) or Pack's own (ours on top; the vanilla ones are the game's particles and a pack
+  cannot remove them — see "Current state" for the three-mode plan).
 - Two real bugs the user caught: (1) the reflection bend had a `0.6 + 0.8 * wetness` factor, so the pack's
   rain rings lived in clear weather — a rain effect must be gated by `wetness` alone, with no baseline;
   (2) waves were invisible within ten blocks because the near field is mostly the bed seen *through* the water,
@@ -208,9 +224,22 @@
   `settings.particles`; at 2 (Minimal) it breaks after the first spot, so none are drawn and the sound stays. A pack
   cannot touch particles at all in API 0.1. The only ways: the game setting, or a resource pack blanking the
   `particle/*splash*` sprite. The user decided to leave it as is.
-- `rain_ripples` is a plain bool again (the user asked for a checkbox): on draws the pack's rings at full
-  strength, off hides them. The three-way Vanilla/Hybrid/Own experiment was dropped. The option's description
-  tells the player that the game's own rings are rain particles and go away with `Particles = Minimal`.
+- How to actually kill vanilla's rain splashes (re-checked 2026-11-15 against main @ 64655ad): the splash is a
+  `minecraft:rain` particle spawned in `crates/horizon-client/src/game/render_tick.rs::tick_particles` (gated by
+  `Settings.particles`, `weather_radius`, `Extras > Weather`), textures `particle/splash_0..3`. A shader pack
+  cannot touch particles (no particle stage; API 0.2 `[entity]` is checked but not drawn) and cannot override
+  resources, so "pack's own only" is unreachable from the pack. Two working routes: (a) a resource pack with
+  `assets/minecraft/polytone/custom_particles/rain.json` = `{"render_type": "invisible"}` (polytone replaces the
+  vanilla type; invisible skips the sprite lookup entirely) — kills splashes everywhere, keeps rain sound and
+  `minecraft:splash`; (b) upstream API `[[hide_particles]] particles = ["rain"] option = ... value = ...` — the
+  engine already reads pack option values via `option_on`/`chosen_cells` in `gfx/native_pack.rs`.
+- The shader the user meant to send for the three-mode `rain_ripples` (vanilla_horizon 2.9.0) does not hide the
+  stock rings after all — that effect came from a native mod, so the pack cannot copy it. Nothing to wait for.
+- `rain_ripples` is a plain bool today (the user asked for a checkbox): on draws the pack's rings at full
+  strength, off hides them. The Vanilla/Hybrid/Own choice was dropped once already because a pack cannot hide
+  vanilla's rings, and it is being revived now (2026-11-15) as the next feature: the user first believed a shader
+  they were sent did it, but that effect came from a native mod. Description still tells the player that the
+  game's own rings are rain particles and go away with `Particles = Minimal`.
 - Caustics depth falloff is a slider now (`caustic_fade`, 0..3, default 1): `exp(-thickness * fade / (reach*1.6))`,
   on top of the sun-elevation factor. 0 keeps the net to any depth.
 - Caustics work under water too: the net (`ridge_net` / `caustic_net`) and its options live in `common.wgsl` now,
@@ -296,8 +325,9 @@
 - Physics the user wants (their laser-beam analogy): shafts must be visible from any angle, including with the
   light behind. Screen-space rays cannot do that — they march the picture toward the disc and need it in frame.
   The honest effect is the volumetric pass (fog), which evaluates in-scattering per point along the view ray.
-  `volumetric.wgsl` used `frame.sun_direction` for the phase, so moon shafts never worked; it uses
-  `frame.light_direction` now, and `fog_light` (0..3) scales the in-scattering.
+  `volumetric.wgsl` used `frame.sun_direction` for the phase, so moon shafts never worked; it used
+  `frame.light_direction`, and `fog_light` (0..3) scaled the in-scattering. The pass is out of the pack since
+  1.28.0 (archived in `assets/volumetric.removed.wgsl`); the lesson stays for anything volumetric.
 - Cloud shadows are procedural, not tied to the engine's clouds: `cloud_shade()` follows the light ray to the
   192-block layer, samples the pack's own fbm there and drifts with time. It reads as patches moving over the land
   but will not line up with the visible clouds; the engine's cloud geometry is not reachable from a pack stage. The
@@ -318,7 +348,8 @@
   water_glints 0.05, cloud_edges 10, moon_rays_strength 0.35 (wave_size 0.4, saturation 0.45, glint_lines 0.1,
   caustics 0.65 were already the defaults). Fog was reset to its own defaults first (on / 0.35 / 42 / 1.0 / 8).
 - 1.26.0 defaults from the user's water tuning: cloud_shadows 0.6, waves ON, wave_size 0.68, wave_length 2,
-  water_glints 0.15, volumetric fog OFF, fog_density 1, fog_light 3, fog_steps 16. Baking is scripted against
+  water_glints 0.15, volumetric fog OFF, fog_density 1, fog_light 3, fog_steps 16 (the four fog options are gone
+  since 1.28.0). Baking is scripted against
   `tomllib` so bools and choices format correctly.
 - In-game reset is per-pack only (`Item::Reset` -> `reset_options()`); `step_option` is always called with
   `reset = false`, so a per-option or per-page reset cannot exist in the pack format. `tools/options.py` covers it:
@@ -333,3 +364,29 @@
   night village, night rays. Regenerate with `/usr/bin/python3` + PIL (RGBA flattens onto black, LANCZOS).
 - 1.27.0 is the first tagged version (`v1.27.0`); `dist/` is gitignored, so the `.hshader` ships as a GitHub
   release asset, never as a tracked file.
+
+## Fog "holes in the spruce" (checked 2026-11-15)
+- The bright specks inside spruce foliage are the leaf texture's cutout gaps with the fogged sky behind them, not a
+  volumetric-fog bug: the hole mask is identical with the fog on and off (IoU 0.99 over the canopy, hole colour
+  131/137/146 off vs 161/168/176 on — fog brightens the background, the shape does not move). Do not "fix" the fog
+  for this. A real remedy would be denser leaf textures or forcing alpha 1 on `[[materials]] id = 1` (vanilla Fast
+  look), and the pack is at 64/64 options, so either costs something.
+- 1.28.0: the volumetric fog is gone (its five options, the `fog` page and the pass). Reason: at quarter resolution it
+  takes one depth per 4x4 pixels, so tiny leaf cutouts got the fog of a neighbour texel and read as holes in the
+  trees; the user judged the effect "плохо работает" and removed it rather than tuning it. Code kept in
+  `assets/volumetric.removed.wgsl` — repo-level `assets/`, NOT inside the pack: `check` refuses any `.wgsl` under
+  `pack/` that no stage names ("is not used by any stage"), so a retired stage has to live outside the pack folder.
+  The removal freed five option slots (64 -> 59), which is the budget for the next additions.
+- vanilla_horizon 2.9.0 (the pack the user sent 2026-11-15) does NOT hide the stock rain rings: no particle reference
+  anywhere in its manifest or WGSL, water keeps vanilla's alpha. The "custom rings instead of vanilla's" the user saw
+  came from a native mod (its toast: "(A) Режимы кругов на воде от дождя"), so a shader pack still cannot do it. The
+  routes stay: a resource pack with `polytone/custom_particles/rain.json` = `{"render_type":"invisible"}`, or an
+  engine-side `[[hide_particles]]`, or such a mod.
+- 1.28.0 (same release): the water/land seam no longer bends the shore into the water. The surface sampled
+  `opaque_color`/`opaque_depth` at `screen + bend + n.xz*0.02` with no regard for how thin the water was, so at the
+  shoreline the tap pulled sand from above the waterline into the water (and a tap into a wall gave a negative
+  thickness, i.e. `absorb` 1, painting the wall's colour over the water). Now one unbent depth tap gives the local
+  thickness, the bend is scaled by `smoothstep(0.06, 0.9, thickness)`, and a bent tap that comes back in front of the
+  water surface (`<= own + 0.35`) is discarded in favour of the unbent one. Cost: one extra depth read per water pixel.
+  Confirmed by the user (2026-11-15): "стало лучше". If a seam ever looks wrong again, the second suspect is the caustics gate
+  (`under_translucent` counts dry sand beside water as under it when the light ray passes next to the water).

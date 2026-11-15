@@ -39,8 +39,12 @@ The Nether and the End are left exactly as vanilla draws them.
 - **Water**: reflections, waves, the vanilla texture on or off, the swell's size, the fine ripples on the normal, rain rings (vanilla's or the pack's own), sun glitter, caustics on the bed, the water's saturation and hue, how see-through the surface is, how fast a dive swallows colour, and how far you see into water.
 - **Nature**: waving plants and the wind's strength.
 - **Sky**: pastel amount, the sun's cell count and size, the sun's blur, cloud edge blur radius, the rainbow, the night mood.
-- **Fog**: volumetric fog off/on, its thickness and height, and the march's step count (8 is the cheap one).
 - **Camera**: glow, sun rays, exposure, contrast, saturation, vignette.
+
+The volumetric fog (light shafts in forests and valleys) is gone from the pack as of 1.28.0: its quarter-resolution
+march put the haze into the smallest gaps of the leaves and read as holes in the trees. The pass is kept verbatim in
+`assets/volumetric.removed.wgsl`; restoring it means the `[[post]]` entry, the `fog` page and its five options back in
+the manifest.
 
 Vanilla's sun and vanilla's clouds are kept: they are geometry in the world, so they hide each other and move
 against the ground when you walk, which a picture drawn on the sky dome cannot do. Cloud rims are softened by the
