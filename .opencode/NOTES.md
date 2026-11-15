@@ -1,6 +1,6 @@
 # Petalveil (Horizon shader pack)
 
-## Current state (1.28.0, 2026-11-15)
+## Current state (1.29.0, 2026-11-15)
 - Stages: `sky`, `material` (+ `lighting.wgsl`, `water.wgsl`), `vertex`, `[shadow]`, `[reflection]`, and four
   `[[post]]` passes (glow prefilter, glow blur, sun rays, composite+grade). No `[weather]` stage.
 - Options: **59 of the 64** allowed. The five free slots are meant for the rain-ring modes (see below).
@@ -356,6 +356,9 @@
   `reset --page <id>` (ids from `pages`), `reset` / `reset --all`, and `show` for what differs from the defaults
   (numeric comparison, so float formatting does not produce false positives).
 - 1.27.0: `water_glints` default 0.15 -> 0.1 (the only value that differed from the defaults after 1.26.0).
+- 1.29.0: defaults re-baked from the user's file again — `water_glints` 0.2, `glint_size` 15.5, `glint_lines` 0.05,
+  `sun_rays` 0.6. "Забери текущие настройки" means ALL values in `shaderpacks/.horizon-options/petalveil.txt`, not
+  only the water ones; their options file is empty afterwards. Bump the minor version with a defaults bake.
 
 ## Screenshots for the site
 - The user takes them (F2); they land in `~/.local/share/horizon/screenshots/` as 2560x1440 RGBA PNG.
