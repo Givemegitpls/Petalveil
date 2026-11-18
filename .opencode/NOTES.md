@@ -1,6 +1,6 @@
 # Petalveil (Horizon shader pack)
 
-## Current state (1.29.0, 2026-11-15)
+## Current state (2.0.0, 2026-11-18)
 - Stages: `sky`, `material` (+ `lighting.wgsl`, `water.wgsl`), `vertex`, `[shadow]`, `[reflection]`, and four
   `[[post]]` passes (glow prefilter, glow blur, sun rays, composite+grade). No `[weather]` stage.
 - Options: **59 of the 64** allowed. The five free slots are meant for the rain-ring modes (see below).
@@ -15,13 +15,50 @@
 - Shipped defaults are the user's tuned file as of 1.27.0 (minus the fog options). Read
   `shaderpacks/.horizon-options/petalveil.txt` before changing a default; the game deletes entries equal to it.
 
+## API 0.2 (2.0.0)
+- The registry closed the 0.1 submission (PR horizon-mods#1050): shader API 0.2 is final, Nightly no longer loads
+  0.1 packs, and the pack has to be ported and resubmitted.
+- Port rule that keeps the look: the pack's art is authored in vanilla's gamma, so each stage converts at its
+  doors — `from_linear` (= the prelude's `horizon_encode`, `c^(1/2.2)`) on what it reads, `to_linear`
+  (`horizon_decode`, `c^2.2`) on what it returns — and the maths in between is unchanged 0.1 code. The engine
+  decodes vanilla's values on the way in and `horizon_encode`s the material/sky/weather result on the way out
+  (`stages.rs`, generated entries), and post passes read and write linear half-float targets, so the round trip
+  reproduces 0.1 exactly; products commute with the 2.2 power anyway. Do NOT "fix" this into linear-native
+  arithmetic per constant: the additive weights (SUN_ADD, glow, rays, sun glints) were tuned by eye in gamma and
+  would all need retuning.
+- `MaterialInput.tint` in 0.2 is the quad's tint WITHOUT shade/AO; the old combined colour is `shaded_tint`
+  (naming it costs no look storage, no remesh). Every old `input.tint` became `input.shaded_tint`.
+- `MaterialInput.emission` changed meaning: block light level/15 (torch 14/15, a candle 3/15), not the old
+  brightness class (7/15, 14/15, 1). The fullbright line reads `max(color, albedo*tint*emission)`, so lamps are a
+  touch dimmer than in 1.x — that is the new value, not a bug.
+- A post pass's alpha is ignored: the composite returns 1.0 instead of `input.color.a`.
+- `PostInput.color` is the previous pass's colour, and an `output = "<name>"` pass does not advance `previous`, so
+  the composite still sees `scene_color`; it reads it with `picture(input.uv)` to be explicit.
+- The manifest moved to `api = "0.2"`, version 2.0.0 (the version users tag). No other keys changed: no
+  `[frame] fog`, no `discard` (coverage stays "engine"), no post `history`.
+- Checker build: `cargo build -p horizon-shader-api --bin horizon-shader` needs the WHOLE tree. A
+  `git clone --filter=blob:none` here failed in checkout ("could not fetch ... from promisor remote", the link
+  stalls); the working route was `curl -C - codeload.github.com/horizon-rust/horizon/tar.gz/refs/heads/main`
+  (resume after the SSL eof) then `tar -xzf`.
+- CI is copied, not written: `.github/workflows/check.yml` + `release.yml` from hildlabs/horizon-shaders, with the
+  checker taken from Horizon's newest release tag (`gh release view --repo horizon-rust/horizon`) instead of a
+  pinned commit, `--out dist/petalveil-$version.hshader`, and a `py_compile` step for `tools/options.py`.
+- Licence: the registry wants the entry's `license = "MIT"` to be the repo's own. The root `LICENSE.txt` used to be
+  the *Wisdom Shaders Horizon port*'s file (Apache-2.0 notices, "started as a fork of ..."), added alone in commit
+  5f505ef and false for this repo — replaced by plain MIT (c) 2026 BarmaleyVIP. `pack/LICENSE` is a symlink to
+  `../LICENSE.txt` (the user's choice): `check` and `pack` follow it and the `.hshader` holds a regular 1068-byte
+  file, hash unchanged. Caveat: git stores it mode 120000, so a Windows checkout without symlinks turns it into a
+  14-byte text file — restore a copy if that ever matters. No
+  code here is derived from that port: `wind_offset` and the water code are in the first commit.
+
 ## Tooling
 - Build the checker once: `git clone --filter=blob:none https://github.com/horizon-rust/horizon.git` in `/tmp/opencode`,
   then `cargo build -p horizon-shader-api --bin horizon-shader` (needs the WHOLE workspace checked out: sparse
-  checkout makes cargo fail on missing member manifests). Proxy `http://127.0.0.1:2080` for cargo/git.
+  checkout makes cargo fail on missing member manifests). Proxy `http://127.0.0.1:2080` for cargo/git. If the clone
+  dies in checkout, the codeload tarball works (see above).
 - `horizon-shader check pack` validates every stage at option defaults/min/max and translates to SPIR-V/Metal/HLSL.
-  `horizon-shader pack . --out dist/<id>-<ver>.hshader`.
-- API reference: `docs/api/shaders-reference.md`, `docs/api/shaders.md` in the cloned repo (also raw on GitHub).
+  `horizon-shader pack pack --out dist/<id>-<ver>.hshader`.
+- API reference: `docs/api/shaders-reference-0.2.md`, `docs/api/shaders.md` in the cloned repo (also raw on GitHub).
 
 ## Pack format gotchas found here
 - `[material]` and `[vertex]` are ONE WGSL module: an `override` declared in both is a redefinition error, and a

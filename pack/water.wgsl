@@ -49,7 +49,7 @@ fn depth_distance(screen: vec2<f32>, depth: f32) -> f32 {
 // vanilla gives this frame, with the sun's warm patch.
 fn sky_reflection(r: vec3<f32>) -> vec3<f32> {
     let up = smoothstep(-0.05, 0.6, r.y);
-    var c = mix(frame.fog_color, frame.sky_color, up);
+    var c = mix(from_linear(frame.fog_color), from_linear(frame.sky_color), up);
     c += vec3<f32>(1.0, 0.82, 0.66) * pow(max(dot(r, frame.sun_direction), 0.0), 6.0) * sun_low() * daylight() * 0.45;
     return c;
 }
@@ -74,11 +74,13 @@ fn water_surface(input: MaterialInput) -> vec4<f32> {
     // Vanilla's water: the sprite, the biome tint and vanilla's light. With the texture off the sprite is
     // replaced by a flat pale blue, so the surface is the biome's own colour with no scrolling pixels —
     // the scrolling is what makes the vanilla texture visible, and it fights the waves.
-    let sprite = select(vec3<f32>(0.78, 0.86, 1.0), input.albedo.rgb, water_texture);
-    let vanilla = sprite * input.tint.rgb * input.lightmap;
-    let light = luma(input.lightmap);
+    let sprite = from_linear(select(vec3<f32>(0.78, 0.86, 1.0), input.albedo.rgb, water_texture));
+    let tint = from_linear(input.shaded_tint.rgb);
+    let lightmap = from_linear(input.lightmap);
+    let vanilla = sprite * tint * lightmap;
+    let light = luma(lightmap);
     // The hue comes from the biome's own tint, so a swamp stays green and a warm sea stays warm.
-    let unit = input.tint.rgb / max(max(input.tint.r, max(input.tint.g, input.tint.b)), 0.001);
+    let unit = tint / max(max(tint.r, max(tint.g, tint.b)), 0.001);
 
     // The fine chop's amount, with its own switch: off, the surface keeps only the swell, the rings and
     // the texture.
@@ -130,7 +132,7 @@ fn water_surface(input: MaterialInput) -> vec4<f32> {
     var mirror = sky_reflection(reflect(-to_eye, n));
     if reflections && top && frame.has_reflection == 1u {
         let uv = clamp(input.screen + n.xz * 0.045 + bend, vec2<f32>(0.0), vec2<f32>(1.0));
-        mirror = textureSampleLevel(reflection, reflection_sampler, uv, 0.0).rgb;
+        mirror = from_linear(textureSampleLevel(reflection, reflection_sampler, uv, 0.0).rgb);
     }
     // Grey storm sky in the mirror, so rain does not turn the water a bright blue.
     mirror = mix(mirror, vec3<f32>(luma(mirror)) * vec3<f32>(0.88, 0.94, 1.0), storm * 0.55);
@@ -154,8 +156,8 @@ fn water_surface(input: MaterialInput) -> vec4<f32> {
             let streak = smoothstep(0.55, 0.95, value_noise(vec2<f32>(dot(world.xz, tang) * 2.4, world.y * 0.6 + t * 2.2)));
             color = mix(color, color * 1.15 + vec3<f32>(0.1, 0.13, 0.15), streak * 0.4);
         }
-        let alpha = select(0.85, input.albedo.a, water_texture) * input.tint.a * clamp(water_opacity, 0.0, 1.0);
-        return vec4<f32>(shoulder(color), clamp(alpha, 0.0, 1.0));
+        let alpha = select(0.85, input.albedo.a, water_texture) * input.shaded_tint.a * clamp(water_opacity, 0.0, 1.0);
+        return vec4<f32>(to_linear(shoulder(color)), clamp(alpha, 0.0, 1.0));
     }
 
     // The surface: our own refraction. The bed is read from the picture taken before the translucent
@@ -176,7 +178,7 @@ fn water_surface(input: MaterialInput) -> vec4<f32> {
     // A tap that comes back in front of the water surface is a block standing out of the water, not the
     // bed: keep the unbent one, so a wall beside the water is never painted across it.
     let use_bent = bent_dist > own + 0.35;
-    var behind = textureLoad(opaque_color, select(plain_at, bent_at, use_bent), 0).rgb;
+    var behind = from_linear(textureLoad(opaque_color, select(plain_at, bent_at, use_bent), 0).rgb);
     let thickness = max(select(plain_dist, bent_dist, use_bent) - own, 0.0);
     let reach = mix(2.0, 12.0, water_clarity);
 
@@ -229,5 +231,5 @@ fn water_surface(input: MaterialInput) -> vec4<f32> {
     // See-through from above: at 1 the water keeps its own colour, at 0 only the bed shows.
     color = mix(behind, color, clamp(water_opacity, 0.0, 1.0));
     // The surface draws itself: what lies behind it is already mixed in, so it writes an opaque pixel.
-    return vec4<f32>(shoulder(color), 1.0);
+    return vec4<f32>(to_linear(shoulder(color)), 1.0);
 }

@@ -28,7 +28,7 @@ fn band_at(y: f32) -> f32 {
 }
 
 fn picture(uv: vec2<f32>) -> vec3<f32> {
-    return textureSampleLevel(scene_color, linear_sampler, clamp(uv, vec2<f32>(0.0), vec2<f32>(1.0)), 0.0).rgb;
+    return from_linear(textureSampleLevel(scene_color, linear_sampler, clamp(uv, vec2<f32>(0.0), vec2<f32>(1.0)), 0.0).rgb);
 }
 
 // 1 where the point at `depth` lies in the cloud layer, 0 elsewhere: sky is 0 too.
@@ -89,8 +89,11 @@ fn cloud_soft(uv: vec2<f32>, radius: f32, seed: f32) -> vec3<f32> {
 }
 
 fn post(input: PostInput) -> vec4<f32> {
-    // Clouds and a couple of pixels of sky beside them; the land is never touched.
-    var c = input.color.rgb;
+    // Clouds and a couple of pixels of sky beside them; the land is never touched. The base is the
+    // world's own picture: every pass before this one writes a target of its own, so `input.color` is
+    // still `scene_color` here. The pass's doors: the frame holds linear light, the grade below was
+    // tuned in vanilla's gamma (see common.wgsl).
+    var c = picture(input.uv);
     if cloud_edges > 0.0 {
         let px = 1.0 / frame.resolution;
         let own = cloud_mask(input.uv);
@@ -113,7 +116,7 @@ fn post(input: PostInput) -> vec4<f32> {
     let night = nightfall();
 
     if bloom > 0.0 {
-        c += textureSampleLevel(petal_glow_b, linear_sampler, input.uv, 0.0).rgb * bloom;
+        c += from_linear(textureSampleLevel(petal_glow_b, linear_sampler, input.uv, 0.0).rgb) * bloom;
     }
     if sun_rays > 0.0 {
         // A nine-tap tent over the quarter-size ray target. It is what turns the march's dithered
@@ -165,5 +168,6 @@ fn post(input: PostInput) -> vec4<f32> {
     // scene (grass at 0.05) the same 0.3 steps read as a 6% screen door over everything.
     let n = hash21(input.pixel);
     c += (n - 0.5) * (0.9 / 255.0);
-    return vec4<f32>(clamp(c, vec3<f32>(0.0), vec3<f32>(1.0)), input.color.a);
+    // Alpha is coverage only in 0.2 and a post pass's is ignored; the last pass draws the frame.
+    return vec4<f32>(to_linear(clamp(c, vec3<f32>(0.0), vec3<f32>(1.0))), 1.0);
 }

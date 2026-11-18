@@ -26,6 +26,21 @@ const SHADE: f32 = 0.18;
 // Vanilla's own light, the base of everything: albedo * tint * lightmap, untouched.
 const VANILLA_GAIN: f32 = 1.0;
 
+// Shader API 0.2 hands every stage linear light, while this pack's art is authored in vanilla's
+// gamma (API 0.1's space): every constant above and below was tuned by eye there. So each stage
+// converts at its doors — `from_linear` on what it reads, `to_linear` on what it returns — and the
+// maths in between is the same maths that was tuned. Products survive the round trip untouched
+// (`(a^2.2 * b^2.2)^(1/2.2) == a * b`); additions and curves do not, which is why the conversion
+// is at the boundary and not per constant. The engine's own boundary helpers are the same powers,
+// and they also turn a negative or a NaN into 0 before the `pow`.
+fn from_linear(c: vec3<f32>) -> vec3<f32> {
+    return horizon_encode(c);
+}
+
+fn to_linear(c: vec3<f32>) -> vec3<f32> {
+    return horizon_decode(c);
+}
+
 // Declared here because the material and vertex stages share one module: a wave option belongs to both.
 override water_waves: bool = true;
 // The swell's size: the user wanted it about ten times smaller than the first working version, so the

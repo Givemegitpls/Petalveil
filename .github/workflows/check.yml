@@ -1,0 +1,58 @@
+# Runs the check the game, the launcher and the registry run, and packages the .hshader.
+#
+# Copied from hildlabs/horizon-shaders (the closest shader-pack repo with CI), with two changes:
+# the checker is built from Horizon's newest Nightly instead of a pinned commit, and the pack is
+# written to dist/. Horizon's stable releases are behind the shader API line (v0.2.97 is from
+# 2026-10-28 and serves 0.1), and `gh release view` returns whatever release was cut last (the
+# launcher, the SDK), so the `nightly` ref is the only reliable "newest 0.2" source.
+name: check
+
+on:
+  push:
+    paths: ["pack/**", "tools/**", ".github/workflows/check.yml"]
+  pull_request:
+    paths: ["pack/**", "tools/**", ".github/workflows/check.yml"]
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Horizon's newest Nightly
+        id: horizon
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: echo "sha=$(gh api repos/horizon-rust/horizon/git/ref/tags/nightly -q .object.sha)" >> "$GITHUB_OUTPUT"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: checkers
+          key: horizon-shader-${{ steps.horizon.outputs.sha }}
+
+      - name: Install horizon-shader
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          cargo install --locked --git https://github.com/horizon-rust/horizon \
+            --rev "${{ steps.horizon.outputs.sha }}" --root checkers horizon-shader-api --bin horizon-shader
+
+      - name: The Python tooling parses
+        run: python3 -m py_compile tools/options.py
+
+      - name: Check
+        run: checkers/bin/horizon-shader check pack
+
+      - name: Package
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' pack/horizon-shaders.toml)
+          mkdir -p dist
+          checkers/bin/horizon-shader pack pack --out "dist/petalveil-$version.hshader"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: petalveil-hshader
+          path: dist/*.hshader

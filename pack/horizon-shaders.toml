@@ -1,8 +1,8 @@
 schema = 1
 id = "petalveil"
 name = "Petalveil"
-version = "1.29.0"
-api = "0.1"
+version = "2.0.0"
+api = "0.2"
 description = "Vanilla's own light kept as the base: sun shadows only touch the light from the sky, so caves, torchlight and night stay vanilla-bright. On top of that a pastel sky, rounded cubic clouds, waves and reflections on water, plants in the wind, and a soft glow."
 authors = ["BarmaleyVIP"]
 license = "MIT"

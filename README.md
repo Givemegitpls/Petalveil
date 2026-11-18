@@ -1,6 +1,6 @@
 # horizon-shader
 
-Sources of **Petalveil**, a shader pack for [Horizon](https://github.com/horizon-rust/horizon) (WGSL, shader API 0.1).
+Sources of **Petalveil**, a shader pack for [Horizon](https://github.com/horizon-rust/horizon) (WGSL, shader API 0.2).
 
 ![Petalveil](assets/screenshots/cover.jpg)
 
@@ -30,6 +30,10 @@ Sources of **Petalveil**, a shader pack for [Horizon](https://github.com/horizon
 
 ## Check and package
 
+CI runs the same check on every push and packages a `.hshader` artifact (`.github/workflows/check.yml`); a pushed
+`v*` tag publishes it as a GitHub release (`.github/workflows/release.yml`), with the tag checked against the
+manifest's `version`. Locally:
+
 The checker is Horizon's own tool; it is not installed system-wide, build it once:
 
 ```sh
@@ -41,7 +45,7 @@ Then, from this folder:
 
 ```sh
 /tmp/opencode/horizon/target/debug/horizon-shader check pack
-/tmp/opencode/horizon/target/debug/horizon-shader pack pack --out petalveil-0.1.0.hshader
+/tmp/opencode/horizon/target/debug/horizon-shader pack pack --out petalveil-2.0.0.hshader
 ```
 
 ## Live in the game

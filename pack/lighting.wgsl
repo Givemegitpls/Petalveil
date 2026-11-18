@@ -98,11 +98,13 @@ fn under_translucent(p: vec3<f32>) -> f32 {
 }
 
 fn lit_terrain(input: MaterialInput) -> vec4<f32> {
-    let albedo = input.albedo.rgb;
-    let tint = input.tint.rgb;
+    // The stage's doors: everything here is vanilla's gamma, as it was in API 0.1 (see common.wgsl).
+    let albedo = from_linear(input.albedo.rgb);
+    let tint = from_linear(input.shaded_tint.rgb);
+    let lightmap = from_linear(input.lightmap);
     // Vanilla first and whole: this is what the scene looks like without the pack, so a cave, a
     // cellar and the night keep vanilla's brightness and torchlight.
-    var color = albedo * tint * input.lightmap * VANILLA_GAIN;
+    var color = albedo * tint * lightmap * VANILLA_GAIN;
 
     let leaf = input.material == MAT_LEAVES;
     let plant = input.material >= MAT_PLANT && input.material <= MAT_VINE;
@@ -156,7 +158,8 @@ fn lit_terrain(input: MaterialInput) -> vec4<f32> {
     // way walls stop light stay vanilla's.
     if colored_light > 0.0 {
         let cl = block_light_color(input.position);
-        let unit = cl.rgb / max(max(cl.r, max(cl.g, cl.b)), 0.001);
+        let lit_hue = from_linear(cl.rgb);
+        let unit = lit_hue / max(max(lit_hue.r, max(lit_hue.g, lit_hue.b)), 0.001);
         let shift = clamp(cl.a, 0.0, 1.0) * colored_light * 0.6;
         color = color * mix(vec3<f32>(1.0), unit, shift);
     }
@@ -174,7 +177,8 @@ fn lit_terrain(input: MaterialInput) -> vec4<f32> {
         }
     }
 
-    // A block that shines keeps shining: redstone, glowstone and lava.
+    // A block that shines keeps shining: redstone, glowstone and lava. `emission` is data (the
+    // block's light level over 15), so it stays a multiplier in this space, as it was.
     color = max(color, albedo * tint * input.emission);
-    return vec4<f32>(shoulder(color), input.albedo.a);
+    return vec4<f32>(to_linear(shoulder(color)), input.albedo.a);
 }

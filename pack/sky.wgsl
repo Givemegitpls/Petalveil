@@ -21,7 +21,8 @@ const SUN_TANGENT: f32 = 0.3;
 
 fn sky(input: SkyInput) -> vec4<f32> {
     let d = input.direction;
-    var c = input.color.rgb;
+    // The stage's doors: vanilla's gamma inside, linear light out (see common.wgsl).
+    var c = from_linear(input.color.rgb);
     let day = daylight();
     let night = nightfall();
     let low = sun_low();
@@ -58,5 +59,5 @@ fn sky(input: SkyInput) -> vec4<f32> {
         }
     }
 
-    return vec4<f32>(clamp(c, vec3<f32>(0.0), vec3<f32>(1.0)), 1.0);
+    return vec4<f32>(to_linear(clamp(c, vec3<f32>(0.0), vec3<f32>(1.0))), 1.0);
 }

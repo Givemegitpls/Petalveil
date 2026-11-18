@@ -1,0 +1,70 @@
+# Publishes the manifest's version as a GitHub release: checks and packs the pack as check.yml
+# does, tags the commit v<version> and attaches petalveil-<version>.hshader. Run it from the
+# Actions tab (Run workflow) on main, or push the tag yourself; either way the tag must match the
+# manifest's version.
+#
+# Copied from hildlabs/horizon-shaders, with the checker built from Horizon's newest Nightly (see
+# check.yml for why not a release tag).
+name: release
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Horizon's newest Nightly
+        id: horizon
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: echo "sha=$(gh api repos/horizon-rust/horizon/git/ref/tags/nightly -q .object.sha)" >> "$GITHUB_OUTPUT"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: checkers
+          key: horizon-shader-${{ steps.horizon.outputs.sha }}
+
+      - name: Install horizon-shader
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          cargo install --locked --git https://github.com/horizon-rust/horizon \
+            --rev "${{ steps.horizon.outputs.sha }}" --root checkers horizon-shader-api --bin horizon-shader
+
+      - name: The tag matches the manifest
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' pack/horizon-shaders.toml)
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            test "v$version" = "$GITHUB_REF_NAME" || { echo "tag $GITHUB_REF_NAME, manifest $version"; exit 1; }
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Check
+        run: checkers/bin/horizon-shader check pack
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          checkers/bin/horizon-shader pack pack --out "dist/petalveil-$VERSION.hshader"
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Pushed tag: the release is already named. Run from a branch: create the tag on this commit.
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            gh release create "v$VERSION" dist/*.hshader --title "Petalveil $VERSION" --generate-notes
+          else
+            gh release create "v$VERSION" dist/*.hshader --target "$GITHUB_SHA" \
+              --title "Petalveil $VERSION" --generate-notes
+          fi
